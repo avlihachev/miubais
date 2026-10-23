@@ -70,6 +70,7 @@ from miubais.workspace import (
 )
 
 app = typer.Typer(no_args_is_help=True)
+SITE_URL = "https://factory.lihachev.pro"
 
 
 def _print_version(value: bool) -> None:
@@ -223,7 +224,7 @@ def _shown(path: Path) -> Path:
 def _failure_pointer(ex: Exercise, stage: Stage) -> str:
     lines = [f"stage {stage.id} failed: {stage.title}", f"tests: {_shown(ex.dir / stage.tests)}"]
     if stage.lesson:
-        lines.append(f"read first: lesson {stage.lesson} (site /{stage.lesson}/)")
+        lines.append(f"read first: lesson {stage.lesson} ({SITE_URL}/{stage.lesson}/)")
     lines.append(f"the stage is described under Stages in {_shown(ex.readme_path)}")
     return "\n".join(lines)
 
@@ -264,6 +265,9 @@ def doctor() -> None:
     for name, ok, detail in doctor_report():
         table.add_row(name, "ok" if ok else "--", detail)
     Console().print(table)
+    typer.echo(
+        "python and uv are required; anything else missing only skips the stages that use it"
+    )
 
 
 @app.command()
@@ -316,6 +320,9 @@ def hint(
     result = asyncio.run(generate_hint(ctx, default_client()))
     typer.echo(result.text)
     typer.echo(f"source: {result.source}")
+    if result.error:
+        typer.echo(f"the tutor could not reach the model: {result.error}")
+        typer.echo("hints run on your Claude Code login: run `claude`, log in, then retry")
 
 
 OnlyOption = typer.Option(

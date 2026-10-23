@@ -45,6 +45,7 @@ class Hint:
     model: str | None = None
     cost_usd: float = 0.0
     session_id: str | None = None
+    error: str | None = None
 
 
 def _read(path: Path) -> list[str]:
@@ -203,6 +204,7 @@ async def generate_hint(ctx: HintContext, client: ModelClient) -> Hint:
     cost = 0.0
     violation = None
     hint = None
+    error = None
     for _ in range(MAX_ATTEMPTS):
         request = ModelRequest(
             system=system,
@@ -216,6 +218,7 @@ async def generate_hint(ctx: HintContext, client: ModelClient) -> Hint:
             result = await client.complete(request)
         except ModelError as err:
             cost += err.cost_usd
+            error = str(err)
             break
         cost += result.cost_usd
         violation, terms = _violation(result.text, ctx.leak_terms)
@@ -233,6 +236,6 @@ async def generate_hint(ctx: HintContext, client: ModelClient) -> Hint:
             break
         rejected += 1
     if hint is None:
-        hint = Hint(_fallback(ctx), "fallback", rejected, tuple(leaked), cost_usd=cost)
+        hint = Hint(_fallback(ctx), "fallback", rejected, tuple(leaked), cost_usd=cost, error=error)
     _log(ctx, hint)
     return hint

@@ -93,6 +93,7 @@ def test_check_reports_and_exit_codes(fixture_course_cli, sample_ex, monkeypatch
     assert bad.exit_code == 1 and "failed" in bad.output
     assert "stage 01-add failed: add returns the sum" in bad.output
     assert "test_01_add.py" in bad.output and "read first: lesson x/01-adding" in bad.output
+    assert "https://factory.lihachev.pro/x/01-adding/" in bad.output
     prog = CliRunner().invoke(app, ["progress"])
     assert prog.exit_code == 0 and "x-sample" in prog.output and "01-add" in prog.output
 

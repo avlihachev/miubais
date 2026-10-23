@@ -125,6 +125,7 @@ def test_model_error_falls_back(ctx):
     h = asyncio.run(generate_hint(ctx, Failing()))
     assert h.source == "fallback" and h.leaks_rejected == 0
     assert "tests/test_01_add.py" in h.text and ctx.stage.title in h.text
+    assert h.error == "boom"
 
 
 def test_hint_is_logged(ctx):
@@ -210,3 +211,20 @@ def test_cli_hint_prints_hint_and_source(fixture_course_cli, started_ws, sample_
     r = CliRunner().invoke(app, ["hint", "x-sample"])
     assert r.exit_code == 0
     assert "Check your return." in r.output and "source: model" in r.output
+
+
+def test_cli_hint_names_the_model_error(fixture_course_cli, started_ws, sample_ex, monkeypatch):
+    home = miubais_home()
+    p = load_progress(home)
+    record(p, sample_ex.id, "01-add", "failed", None)
+    save_progress(p, home, None)
+
+    class NotLoggedIn:
+        async def complete(self, req):
+            raise ModelError("Not logged in · Please run /login")
+
+    monkeypatch.setattr("miubais.cli.default_client", NotLoggedIn)
+    r = CliRunner().invoke(app, ["hint", "x-sample"])
+    assert r.exit_code == 0 and "source: fallback" in r.output
+    assert "could not reach the model: Not logged in" in r.output
+    assert "run `claude`, log in" in r.output
