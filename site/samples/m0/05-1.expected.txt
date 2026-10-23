@@ -1,0 +1,5 @@
+loop: 2 turns, 'A1 costs 12.50 and 7 are in stock'
+tool results in one user message: {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_01", "content": "12.50"}, {"type": "tool_result", "tool_use_id": "toolu_02", "content": "7"}]}
+strict tool on the wire: {"name": "get_price", "description": "Unit price in EUR for a SKU.", "strict": true, "input_schema": {"type": "object", "properties": {"sku": {"type": "string", "description": "Catalogue id such as A1."}}, "required": ["sku"], "additionalProperties": false}}
+output_config sent: {"format": {"schema": {"type": "object", "title": "StockReport", "properties": {"sku": {"type": "string", "title": "Sku"}, "price_eur": {"type": "number", "title": "Price Eur"}, "in_stock": {"type": "integer", "title": "In Stock"}, "reorder": {"type": "boolean", "title": "Reorder"}}, "additionalProperties": false, "required": ["sku", "price_eur", "in_stock", "reorder"]}, "type": "json_schema"}}
+parsed: StockReport(sku='A1', price_eur=12.5, in_stock=7, reorder=False) stop_reason: end_turn

@@ -1,0 +1,13 @@
+PRs / reviewed by the agent          12 / 11
+total cost, USD                         0.70
+mean cost per reviewed PR, USD         0.064
+cost per 100 such PRs, USD              6.38
+wall time, s (sequential)                131
+median time per PR, s                   11.4
+merge / hold / block               1 / 3 / 8
+verdicts equal to the key           10 of 12
+findings after cleaning                   19
+of them matching no label                  8
+precision / recall              0.579 / 0.917
+blocker recall                          0.80
+failed reviews                             0

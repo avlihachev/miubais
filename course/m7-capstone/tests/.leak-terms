@@ -1,0 +1,113 @@
+
+
+## Repository rules that apply to the changed files
+
+
+
+
+Blocker recall: 
+
+timed out after 
+    verify gate: 
+ approval(s), needs 2
+ is outside the tree under review
+ s, reviewer 
+# Pre-review report (
+### Rule `
+); the gate's result overrides the summary
+**Verdict: 
+, wall time 
+. Cost $
+. Review: 
+. Total cost $
+.** Verify: 
+: bad finding: 
+: frontmatter is not valid YAML (quote globs): 
+: review failed with 
+: the reviewer returned no result
+: the reviewer returned no structured output
+; cost $
+BLOCKING_KINDS
+CONFLICT
+DENIED_TOOLS
+DUMPABLE
+FRONTMATTER
+GIT_CEILING_DIRECTORIES
+GOTOOLCHAIN
+GUARDED
+HEADER
+HOLDING_KINDS
+MAX_UNREVIEWED_DAYS
+MIGRATION
+NEGATED
+NO_COLOR
+NO_SUBJECT
+PASS_CLAIM
+READERS
+REVIEW_PROMPT
+RULES_DIR
+Report only issues that this patch introduces; pre-existing problems in code the patch does not change do not count. `file` is a path relative to the repository root and `line` is a line number in the new version of that file, after the patch. Use the category that fits the issue and name the rule it breaks when one does.
+Repository signals only; verdicts driven by findings are in the table above.
+Review error: 
+Reviewer summary: 
+SLACK
+Verify gate: 
+WINDOW
+You pre-review one pull request before a human does. The working directory is the repository with the patch already applied. You may read files in it; you never change anything. Reply only with the findings JSON: a summary of at least 20 characters and the findings, each with file, line, severity (blocker, major or minor), category, message, confidence between 0 and 1 and, when a rule applies, the rule's name.
+[.;!?\n]+
+\A---[ \t]*\n(.*?)^---[ \t]*\n?
+\b(not|never|fail\w*)\b|n't
+\b(tests?|suite|checks?|ci|build)\b[^.]*?\b(pass(es|ed|ing)?|green|succeed(s|ed)?)\b|\ball\s+green\b
+\bno\s+$
+^diff --git a/(\S+) b/(\S+)$|^\+\+\+ b/(\S+)$|^--- a/(\S+)$|^rename (?:from|to) (\S+)$
+^error: (?:patch failed: (?P<hunk>.+):\d+|(?P<file>.+?): (?:patch does not apply|already exists in working directory|No such file or directory|does not exist in index))$
+^migrations/(\d+)_[^/]*\.sql$
+_blocker
+_cite
+_collect
+_expand
+_finding_line
+_findings
+_first
+_git_apply
+_hits
+_meta
+_metrics
+_metrics_table
+_observe
+_paths
+_pr_section
+_prepare
+_regex
+_result
+_review
+_rule
+_same_issue
+_score
+_split_top_level
+_stale_migrations
+_step
+capstone-
+claims_tests_pass
+copy_tree
+decide
+flags
+go_out
+groups
+guarded
+hit_findings
+hit_labels
+holding
+hunk
+last_run
+load_key
+load_labels
+load_prs
+local
+no recorded review for 
+print_summary
+review_pr
+the reviewer's summary says the tests pass, but the verify gate failed (
+ts_out
+verify_status
+| scope | precision | recall | findings | labels |

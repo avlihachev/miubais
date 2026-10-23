@@ -1,0 +1,145 @@
+---
+import { loadCourse } from "../../lib/course";
+import { NO_RECORD } from "../../lib/landing";
+
+const { modules } = await loadCourse();
+const stageCount = (m: (typeof modules)[number]) =>
+  m.status === "merged" ? `${m.stages.length}` : `${m.stagesWritten} / ${m.stages.length}`;
+const badge = { merged: "pass", "in progress": "hold", "not started": "hold" } as const;
+---
+
+<section class="mg-modules not-content">
+  <table>
+    <thead>
+      <tr><th>Module</th><th>What you build</th><th>Stages</th><th>Live record</th><th class="wide"><span class="sr">Status</span></th></tr>
+    </thead>
+    <tbody>
+      {
+        modules.map((m) => (
+          <tr>
+            <td class="id">{m.label}</td>
+            <td>
+              <div class="t"><a href={m.href}>{m.title}</a></div>
+              <div class="w">{m.what}</div>
+              <span class={`v narrow ${badge[m.status]}`}>{m.status}</span>
+            </td>
+            <td class="n">{stageCount(m)}</td>
+            <td class:list={["n", { mute: m.live === NO_RECORD }]}>{m.live}</td>
+            <td class="wide"><span class={`v ${badge[m.status]}`}>{m.status}</span></td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+  <p class="cap">
+    Order to take them: {modules.map((m) => m.label).join(" → ")}. Stages marked live need a Claude Code login; some need
+    Docker, Go, Node or Ollama. <code>miubais doctor</code> tells you which.
+  </p>
+</section>
+
+<style>
+  .mg-modules {
+    color: var(--mg-ink);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+  th {
+    padding: 0.375rem 0.5rem;
+    border-bottom: 1px solid var(--mg-rule);
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--mg-mute);
+  }
+  td {
+    padding: 0.6875rem 0.5rem;
+    border-bottom: 1px solid var(--mg-rule);
+    vertical-align: top;
+  }
+  .id {
+    font: 0.8125rem/1.6 var(--__sl-font-mono);
+    color: var(--mg-mute);
+    white-space: nowrap;
+  }
+  .t {
+    font-weight: 600;
+  }
+  .w {
+    margin-top: 2px;
+    font-size: 0.8125rem;
+    color: var(--mg-mute);
+  }
+  .n {
+    font: 0.8125rem/1.6 var(--__sl-font-mono);
+    white-space: nowrap;
+  }
+  a {
+    color: var(--mg-link);
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+  .v {
+    padding: 2px 7px;
+    border: 1px solid;
+    border-radius: 10px;
+    font: 0.75rem var(--__sl-font-mono);
+    white-space: nowrap;
+  }
+  .v.pass {
+    color: var(--mg-pass);
+    border-color: var(--mg-pass-line);
+    background: var(--mg-pass-bg);
+  }
+  .v.hold {
+    color: var(--mg-hold);
+    border-color: var(--mg-hold-line);
+    background: var(--mg-hold-bg);
+  }
+  .mute {
+    color: var(--mg-mute);
+  }
+  .v.narrow {
+    display: none;
+  }
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .cap {
+    margin: 0.625rem 0 0;
+    font-size: 0.8125rem;
+    color: var(--mg-mute);
+  }
+  code {
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--mg-code-bg);
+    font: 0.8125rem var(--__sl-font-mono);
+  }
+  @media (max-width: 760px) {
+    .w {
+      display: none;
+    }
+    td.n {
+      white-space: normal;
+    }
+    .wide {
+      display: none;
+    }
+    .v.narrow {
+      display: inline-block;
+      margin-top: 0.25rem;
+    }
+  }
+</style>

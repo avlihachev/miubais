@@ -1,0 +1,41 @@
+recorded: synthetic
+files:
+- name: loop_turn1.json
+  purpose: assistant turn with an empty thinking block (signature only) and two tool_use blocks (get_price, get_stock), usage 712/88
+  recorded: synthetic
+- name: loop_turn2.json
+  purpose: final end_turn text after tool results, usage 836/18
+  recorded: synthetic
+- name: loop_truncated.json
+  purpose: max_tokens stop at the requested cap of 16000; an empty thinking block (signature only) took most of the budget, so the text is one clause; usage 18/16000
+  recorded: synthetic
+- name: loop_pause.json
+  purpose: pause_turn stop with a short text block; the loop re-sends with it appended
+  recorded: synthetic
+- name: loop_refusal.json
+  purpose: refusal stop with stop_details.category and empty content
+  recorded: synthetic
+- name: stream_ok.json
+  purpose: SSE stream of a three-chunk text reply ending with end_turn, usage 40/9
+  recorded: synthetic
+- name: stream_truncated.json
+  purpose: SSE stream with an empty thinking block and a three-chunk text reply ending with stop_reason max_tokens at the requested cap of 64000; usage 18/64000
+  recorded: synthetic
+- name: cache_write.json
+  purpose: reply that writes the prefix cache, usage 40 input / 1800 cache_creation
+  recorded: synthetic
+- name: cache_read.json
+  purpose: reply that reads the prefix cache, usage 42 input / 1800 cache_read
+  recorded: synthetic
+- name: batch_results.jsonl
+  purpose: six shuffled batch result lines, four succeeded (full messages, service_tier batch), one errored invalid_request_error, one expired
+  recorded: synthetic
+- name: structured_ok.json
+  purpose: output_config.format reply, one text block holding schema-valid JSON, usage 260/31
+  recorded: synthetic
+- name: scenario.yaml
+  purpose: stage 06 cost-plan scenario (volumes, gap distribution, latency target, summary job)
+  recorded: synthetic
+- name: usage_log.jsonl
+  purpose: stage 06 request log, 40 requests over 8 conversations, three with a system prompt that changes per request
+  recorded: synthetic

@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-23",
+  "stage": "09-live-answer",
+  "model": "claude-opus-5-5",
+  "limit_usd": 0.05,
+  "support_floor": 4.0,
+  "cost_usd": 0.0986,
+  "max_total_usd": 0.2,
+  "wall_seconds": 29.4,
+  "answers": [
+    {
+      "id": "q03",
+      "kind": "factual",
+      "refused": false,
+      "cited": 3,
+      "cites_relevant": true,
+      "uncited_claims": 0,
+      "invalid_citations": 0,
+      "cost_usd": 0.0367
+    },
+    {
+      "id": "q40",
+      "kind": "lexical",
+      "refused": false,
+      "cited": 1,
+      "cites_relevant": true,
+      "uncited_claims": 1,
+      "invalid_citations": 0,
+      "cost_usd": 0.0289
+    },
+    {
+      "id": "q46",
+      "kind": "conceptual",
+      "refused": false,
+      "cited": 2,
+      "cites_relevant": true,
+      "uncited_claims": 0,
+      "invalid_citations": 0,
+      "cost_usd": 0.033
+    }
+  ]
+}

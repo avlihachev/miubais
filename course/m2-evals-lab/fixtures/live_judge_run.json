@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-17",
+  "stage": "08-live-judge",
+  "model": "claude-opus-5-5",
+  "n": 20,
+  "outcome_agreement": 20,
+  "category_agreement": 19,
+  "cost_usd": 0.2717
+}

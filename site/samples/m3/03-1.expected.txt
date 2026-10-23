@@ -1,0 +1,5 @@
+POST http://localhost:3000/api/public/otel/v1/traces
+  Authorization: Basic cGstbGYtZXhhbXBsZTpzay1sZi1leGFtcGxl
+  x-langfuse-ingestion-version: 4
+  decoded: pk-lf-example:sk-lf-example
+GET  http://localhost:3000/api/public/v2/observations?traceId=c6339da141692f1f040f1de64e41c859&limit=100

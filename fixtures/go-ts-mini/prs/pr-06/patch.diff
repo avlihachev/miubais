@@ -1,0 +1,85 @@
+diff --git a/internal/api/handlers.go b/internal/api/handlers.go
+index e4857eb..854041c 100644
+--- a/internal/api/handlers.go
++++ b/internal/api/handlers.go
+@@ -28,6 +28,7 @@ func (h *Handler) Routes() http.Handler {
+ 	mux.HandleFunc("POST /jobs", h.create)
+ 	mux.HandleFunc("GET /jobs/{id}", h.get)
+ 	mux.HandleFunc("POST /jobs/{id}/cancel", h.cancel)
++	mux.HandleFunc("PUT /jobs/{id}/translator", h.setTranslator)
+ 	return mux
+ }
+ 
+@@ -39,6 +40,10 @@ type createRequest struct {
+ 	Translator    string  `json:"translator"`
+ }
+ 
++type translatorRequest struct {
++	Translator string `json:"translator"`
++}
++
+ type listResponse struct {
+ 	Jobs []jobs.Job `json:"jobs"`
+ }
+@@ -121,3 +126,17 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
+ 	}
+ 	writeJSON(w, http.StatusOK, job)
+ }
++
++func (h *Handler) setTranslator(w http.ResponseWriter, r *http.Request) {
++	var req translatorRequest
++	if err := decode(r, &req); err != nil {
++		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be a translator object")
++		return
++	}
++	job, err := h.svc.SetTranslator(r.PathValue("id"), req.Translator)
++	if err != nil {
++		writeServiceError(w, err)
++		return
++	}
++	writeJSON(w, http.StatusOK, job)
++}
+diff --git a/internal/api/handlers_test.go b/internal/api/handlers_test.go
+index d76c2fd..032f452 100644
+--- a/internal/api/handlers_test.go
++++ b/internal/api/handlers_test.go
+@@ -115,3 +115,16 @@ func TestListFiltersByStatus(t *testing.T) {
+ 		t.Fatalf("want only job-0001, got %+v", body.Jobs)
+ 	}
+ }
++
++func TestSetTranslatorOnPendingJob(t *testing.T) {
++	srv := newServer()
++	do(t, srv, http.MethodPost, "/jobs", validBody)
++	rec := do(t, srv, http.MethodPut, "/jobs/job-0001/translator", `{"translator":"dara"}`)
++	var got jobs.Job
++	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
++		t.Fatal(err)
++	}
++	if rec.Code != http.StatusOK || got.Translator != "dara" {
++		t.Fatalf("want 200 with the new translator, got %d %+v", rec.Code, got)
++	}
++}
+diff --git a/internal/jobs/service.go b/internal/jobs/service.go
+index bba8bb0..a4ed17a 100644
+--- a/internal/jobs/service.go
++++ b/internal/jobs/service.go
+@@ -74,3 +74,18 @@ func (s *Service) Cancel(id string) (Job, error) {
+ 	}
+ 	return job, nil
+ }
++
++func (s *Service) SetTranslator(id, translator string) (Job, error) {
++	job, err := s.repo.Get(id)
++	if err != nil {
++		return Job{}, err
++	}
++	if job.Status != StatusPending {
++		return Job{}, ErrInvalidStatus
++	}
++	job.Translator = translator
++	if err := s.repo.Put(job); err != nil {
++		return Job{}, fmt.Errorf("store job: %w", err)
++	}
++	return job, nil
++}

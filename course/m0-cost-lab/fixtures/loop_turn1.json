@@ -1,0 +1,41 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": {
+    "id": "msg_l1",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-opus-5-5",
+    "content": [
+      {
+        "type": "thinking",
+        "thinking": "",
+        "signature": "EqQBCkYIBxgCKkBsyntheticSignatureForTheCourseFixtureOnly"
+      },
+      {
+        "type": "tool_use",
+        "id": "toolu_01",
+        "name": "get_price",
+        "input": {
+          "sku": "A1"
+        }
+      },
+      {
+        "type": "tool_use",
+        "id": "toolu_02",
+        "name": "get_stock",
+        "input": {
+          "sku": "A1"
+        }
+      }
+    ],
+    "stop_reason": "tool_use",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 712,
+      "output_tokens": 88
+    }
+  }
+}

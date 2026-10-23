@@ -1,0 +1,40 @@
+exercise: m2-evals-lab
+module: m2
+title: Evals lab
+package: evals_lab
+stages:
+  - id: "01-trace-loader"
+    title: Load and view traces
+    tests: tests/test_01_trace_loader.py
+    lesson: m2/01-error-analysis-first
+  - id: "02-labels-and-agreement"
+    title: Labels file and inter-annotator agreement
+    tests: tests/test_02_labels_and_agreement.py
+    lesson: m2/02-judges-and-agreement
+  - id: "03-judge-interface"
+    title: Judge protocol, fake judge, schema-bound agent judge
+    tests: tests/test_03_judge_interface.py
+    lesson: m2/02-judges-and-agreement
+  - id: "04-trust-gate"
+    title: Judge trust gate from agreement metrics
+    tests: tests/test_04_trust_gate.py
+    lesson: m2/02-judges-and-agreement
+  - id: "05-regression-gate"
+    title: Regression gate against a stored baseline
+    tests: tests/test_05_regression_gate.py
+    lesson: m2/05-ci-gating-and-tracking
+  - id: "06-score-history"
+    title: Score history and trend
+    tests: tests/test_06_score_history.py
+    lesson: m2/05-ci-gating-and-tracking
+  - id: "07-hand-labels"
+    title: Label 40 traces by hand (judgment stage)
+    tests: tests/test_07_hand_labels.py
+    lesson: m2/01-error-analysis-first
+  - id: "08-live-judge"
+    title: "Live: the agent judge on 20 traces"
+    tests: tests/test_08_live_judge.py
+    lesson: m2/02-judges-and-agreement
+    live: true
+    requires: [claude-auth]
+    timeout: 900

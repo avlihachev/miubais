@@ -1,0 +1,35 @@
+exercise: m0-cost-lab
+module: m0
+title: Inference economics cost lab
+package: cost_lab
+stages:
+  - id: "01-tool-loop"
+    title: Hand-written tool-use loop
+    tests: tests/test_01_tool_loop.py
+    lesson: m0/01-tokens-prefill-decode
+  - id: "02-streaming"
+    title: Streaming with a final message
+    tests: tests/test_02_streaming.py
+    lesson: m0/01-tokens-prefill-decode
+  - id: "03-cache-prefix"
+    title: Cache-aware prompt assembly
+    tests: tests/test_03_cache_prefix.py
+    lesson: m0/03-prompt-caching
+  - id: "04-cost-ledger"
+    title: Cost ledger from usage
+    tests: tests/test_04_cost_ledger.py
+    lesson: m0/04-cost-levers
+  - id: "05-batch-builder"
+    title: Batch requests keyed by custom_id
+    tests: tests/test_05_batch_builder.py
+    lesson: m0/04-cost-levers
+  - id: "06-cost-plan"
+    title: Cost plan for the scenario (judgment stage)
+    tests: tests/test_06_cost_plan.py
+    lesson: m0/04-cost-levers
+  - id: "07-live-cache-hit"
+    title: "Live: cache hits on ten requests"
+    tests: tests/test_07_live_cache_hit.py
+    lesson: m0/03-prompt-caching
+    live: true
+    requires: [api-key]

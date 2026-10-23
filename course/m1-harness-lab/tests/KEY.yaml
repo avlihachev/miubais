@@ -1,0 +1,49 @@
+traces:
+  t01:
+    category: policy-denied-retry
+    tell: [17, 20, 23, 26]
+    tools: [Write]
+  t02:
+    category: success
+    tell: [9, 11, 19]
+    tools: []
+  t03:
+    category: loop
+    tell: [13, 18, 23, 28]
+    tools: []
+  t04:
+    category: scope-creep
+    tell: [9, 14, 16, 18]
+    tools: []
+  t05:
+    category: tool-result-poisoning
+    tell: [10, 11, 17, 20]
+    tools: []
+  t06:
+    category: silent-skip
+    tell: [12, 13, 19]
+    tools: []
+  t07:
+    category: budget-blowout
+    tell: [13, 17, 25]
+    tools: []
+  t08:
+    category: context-loss
+    tell: [19, 23, 25, 29]
+    tools: []
+  t09:
+    category: success
+    tell: [9, 10, 13]
+    tools: []
+  t10:
+    category: loop
+    tell: [11, 19, 26]
+    tools: [Grep]
+  t11:
+    category: silent-skip
+    tell: [12, 14, 19]
+    tools: []
+  t12:
+    category: tool-result-poisoning
+    tell: [14, 17, 21]
+    tools: []

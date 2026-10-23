@@ -1,0 +1,9 @@
+{
+  "title": "Make cancel idempotent",
+  "author": "dara",
+  "created_at": "2026-10-15",
+  "approvals": [
+    "bruno"
+  ],
+  "description": "Retries from the mobile client hit 409 on a second cancel; the cancel endpoint now answers 200 with the current job instead."
+}

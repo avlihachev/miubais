@@ -1,0 +1,46 @@
+diff --git a/CHANGELOG.json b/CHANGELOG.json
+index a0fdaf1..7f4d82c 100644
+--- a/CHANGELOG.json
++++ b/CHANGELOG.json
+@@ -1,4 +1,12 @@
+ [
++  {
++    "version": "0.5.0",
++    "date": "2026-10-12",
++    "entries": [
++      "Error responses carry the request id",
++      "JSON responses are sent with Cache-Control: no-store"
++    ]
++  },
+   {
+     "version": "0.4.0",
+     "date": "2026-10-10",
+diff --git a/internal/api/errors.go b/internal/api/errors.go
+index d979b17..d34781e 100644
+--- a/internal/api/errors.go
++++ b/internal/api/errors.go
+@@ -14,12 +14,14 @@ type errorBody struct {
+ }
+ 
+ type errorDetail struct {
+-	Code    string `json:"code"`
+-	Message string `json:"message"`
++	Code      string `json:"code"`
++	Message   string `json:"message"`
++	RequestID string `json:"request_id,omitempty"`
+ }
+ 
+ func writeJSON(w http.ResponseWriter, status int, v any) {
+ 	w.Header().Set("Content-Type", "application/json")
++	w.Header().Set("Cache-Control", "no-store")
+ 	w.WriteHeader(status)
+ 	if err := json.NewEncoder(w).Encode(v); err != nil {
+ 		log.Printf("write response: %v", err)
+@@ -28,6 +30,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
+ 
+ func writeError(w http.ResponseWriter, status int, code, message string) {
+ 	body := errorBody{Error: errorDetail{Code: code, Message: message}}
++	body.Error.RequestID = w.Header().Get("X-Request-Id")
+ 	writeJSON(w, status, body)
+ }
+ 

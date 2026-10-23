@@ -1,0 +1,11 @@
+category                 traces fails  share
+--------------------------------------------
+loop                          3     3    25%
+scope-creep                   2     2    17%
+silent-skip                   2     2    17%
+budget-blowout                1     1     8%
+context-loss                  1     1     8%
+tool-result-poisoning         1     1     8%
+success                       3     0    25%
+new categories per batch of 4: [4, 2, 1]
+10 free-text codes -> 7 categories

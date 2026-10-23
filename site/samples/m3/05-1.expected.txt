@@ -1,0 +1,8 @@
+readme-typo  cheap:success                                      ends on cheap   0.004 USD
+flaky-test   cheap:max_turns -> default:budget -> strong:success ends on strong  0.724 USD
+drop-table   cheap:policy                                       ends on cheap   0.002 USD
+
+route    model              tries  ok      usd turns
+cheap    claude-haiku-5-5       3   1   0.0180    13
+default  claude-sonnet-5-5      1   0   0.4020    11
+strong   claude-opus-5-5        1   1   0.3100     6

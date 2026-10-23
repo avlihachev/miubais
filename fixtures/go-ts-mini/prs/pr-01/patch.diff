@@ -1,0 +1,78 @@
+diff --git a/CHANGELOG.json b/CHANGELOG.json
+index 4768851..d0b9b3d 100644
+--- a/CHANGELOG.json
++++ b/CHANGELOG.json
+@@ -1,4 +1,11 @@
+ [
++  {
++    "version": "0.5.0",
++    "date": "2026-10-15",
++    "entries": [
++      "Show the due date of a job in the web client"
++    ]
++  },
+   {
+     "version": "0.4.0",
+     "date": "2026-10-10",
+diff --git a/web/src/format.test.ts b/web/src/format.test.ts
+index eb6c97f..582fc44 100644
+--- a/web/src/format.test.ts
++++ b/web/src/format.test.ts
+@@ -1,7 +1,7 @@
+ import { test } from "node:test";
+ import assert from "node:assert/strict";
+ import type { Job } from "./api.ts";
+-import { formatDate, formatHours, formatLanguages, formatSummary } from "./format.ts";
++import { formatDate, formatDue, formatHours, formatLanguages, formatSummary } from "./format.ts";
+ 
+ const sample: Job = {
+   id: "job-0001",
+@@ -29,6 +29,22 @@ test("formatDate keeps the calendar date", () => {
+   assert.equal(formatDate("2026-10-01T09:30:00Z"), "2026-10-01");
+ });
+ 
++const now = new Date("2026-10-15T12:00:00Z");
++
++test("formatDue without a due date says it is unknown", () => {
++  assert.equal(formatDue(undefined, now), "due date unknown");
++});
++
++test("formatDue counts whole days ahead", () => {
++  assert.equal(formatDue("2026-10-15T18:00:00Z", now), "due today");
++  assert.equal(formatDue("2026-10-16T13:00:00Z", now), "due in 1 day");
++  assert.equal(formatDue("2026-10-18T12:00:00Z", now), "due in 3 days");
++});
++
++test("formatDue flags a past due date as overdue", () => {
++  assert.equal(formatDue("2026-10-14T08:00:00Z", now), "overdue since 2026-10-14");
++});
++
+ test("formatSummary combines reference, languages, estimated hours and status", () => {
+   assert.equal(formatSummary(sample), "REF-1: en -> de, 24 min (In progress)");
+ });
+diff --git a/web/src/format.ts b/web/src/format.ts
+index 842bbaf..e2ac737 100644
+--- a/web/src/format.ts
++++ b/web/src/format.ts
+@@ -16,6 +16,21 @@ export function formatDate(iso: string): string {
+   return iso.slice(0, 10);
+ }
+ 
++export function formatDue(due: string | undefined, now: Date): string {
++  if (!due) {
++    return "due date unknown";
++  }
++  const remainingMs = Date.parse(due) - now.getTime();
++  if (remainingMs < 0) {
++    return `overdue since ${formatDate(due)}`;
++  }
++  const days = Math.floor(remainingMs / 86_400_000);
++  if (days === 0) {
++    return "due today";
++  }
++  return `due in ${days} day${days === 1 ? "" : "s"}`;
++}
++
+ export function formatSummary(job: Job): string {
+   const languages = formatLanguages(job.source_lang, job.target_lang);
+   const hours = formatHours(job.hours_estimate);

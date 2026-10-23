@@ -1,0 +1,7 @@
+{
+  "title": "Extract status filtering and saving in the service",
+  "author": "aino",
+  "created_at": "2026-09-20",
+  "approvals": [],
+  "description": "Pure refactor: List uses a filterByStatus helper and Create and Cancel share one save method; behaviour and tests are unchanged."
+}

@@ -1,0 +1,249 @@
+---
+title: Kubernetes for inference
+description: The vLLM production stack Helm chart and what it renders, GPU requests and the nvidia runtime class, model weights on a volume, the HF token as a Secret reference, offline validation with kubeconform and vendored schemas, the Gateway API Inference Extension's InferencePool and endpoint picker, and KEDA scaling on vllm:num_requests_waiting with the HPA's stabilisation windows.
+module: m6
+order: 4
+verified_on: 2026-10-22
+executed: local
+pins:
+  "pypi:claude-agent-sdk": "0.2.168"
+  "github:vllm-project/vllm": "v0.31.0"
+  "github:llm-d/llm-d": "v0.10.0"
+  "github:kubernetes-sigs/gateway-api-inference-extension": "v1.6.2"
+  "github:kedacore/keda": "v2.21.0"
+  "model:default": claude-opus-5-5
+sources:
+  - url: https://docs.vllm.ai/en/stable/deployment/integrations/production-stack/
+    title: "vLLM docs: Production stack"
+    published: 2026-06-19
+    checked: 2026-10-22
+  - url: https://docs.vllm.ai/en/stable/configuration/engine_args/
+    title: "vLLM docs: Engine arguments"
+    checked: 2026-10-22
+  - url: https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/
+    title: "Kubernetes: Schedule GPUs"
+    published: 2024-09-20
+    checked: 2026-10-22
+  - url: https://github.com/yannh/kubeconform
+    title: kubeconform README
+    checked: 2026-10-22
+  - url: https://gateway-api-inference-extension.sigs.k8s.io/
+    title: Gateway API Inference Extension
+    checked: 2026-10-22
+  - url: https://gateway-api-inference-extension.sigs.k8s.io/api-types/inferencepool/
+    title: "Gateway API Inference Extension: InferencePool"
+    checked: 2026-10-22
+  - url: https://llm-d.ai/docs/0.10/architecture
+    title: llm-d v0.10, Architecture
+    checked: 2026-10-22
+  - url: https://docs.vllm.ai/en/stable/design/metrics/
+    title: "vLLM docs: Metrics"
+    published: 2026-10-12
+    checked: 2026-10-22
+  - url: https://keda.sh/docs/latest/scalers/prometheus/
+    title: "KEDA v2.21: Prometheus scaler"
+    checked: 2026-10-22
+  - url: https://keda.sh/docs/latest/reference/scaledobject-spec/
+    title: "KEDA v2.21: ScaledObject specification"
+    checked: 2026-10-22
+  - url: https://keda.sh/docs/latest/concepts/scaling-deployments/
+    title: "KEDA v2.21: Scaling Deployments, StatefulSets and custom resources"
+    checked: 2026-10-22
+  - url: https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/
+    title: "Kubernetes: Horizontal Pod Autoscaling"
+    published: 2026-08-03
+    checked: 2026-10-22
+---
+
+import Pipeline from "../../../components/diagrams/Pipeline.astro";
+
+**Prerequisites:** [lesson 02](../02-serving-internals/), which explains the vLLM engine arguments this lesson sets through a Helm chart, and stage 03 of the exercise, which this lesson walks through.
+
+## Why this matters for the factory
+
+A web service on Fly or in a Docker Compose file is a cheap, interchangeable process: it starts in seconds, any replica can take any request, and CPU load tells you when to add one. A vLLM replica breaks all three assumptions. It holds a whole GPU, so a replica is the most expensive unit in the cluster. It starts in minutes, because the image is large and the weights (tens of gigabytes for a 27B model) must be downloaded or read from a volume and loaded into GPU memory. And replicas are not interchangeable for routing: each one holds a KV cache and a prefix cache, so sending a request to the replica that already has its prefix cached saves prefill work, and sending it to a replica with a long queue costs time to first token.
+
+Once a factory runs open models on its own GPUs, someone has to write the manifests for this. The course does not give you a GPU cluster, so stage 03 renders and validates the manifests offline and stage 04 replays an invented day of metrics through an autoscaling policy. The mechanics are the same ones a real cluster would apply.
+
+## Core idea
+
+Four layers, each with its own Kubernetes objects:
+
+- **Scheduling.** The vLLM pod requests `nvidia.com/gpu`, runs under the `nvidia` runtime class, keeps its weights on a `PersistentVolumeClaim` and reads its token from a `Secret`.
+- **Serving.** A Deployment of vLLM pods, rendered by the production stack chart from a short values file.
+- **Routing.** A `Gateway` and `HTTPRoute` send `/v1` traffic to an `InferencePool`, whose endpoint picker chooses a pod by its live metrics.
+- **Scaling.** A KEDA `ScaledObject` turns `vllm:num_requests_waiting` into a replica count through an HPA.
+
+A request travels through the routing layer:
+
+<Pipeline
+  label="An OpenAI-compatible request through the inference gateway"
+  from="client: POST /v1/chat/completions"
+  to="streamed reply from one vLLM pod"
+  steps={[
+    { name: "Gateway", does: ["listener on port 80, implemented by Envoy Gateway, kgateway or GKE Gateway"] },
+    { name: "HTTPRoute", does: ["matches `/v1`", "backendRef: group `inference.networking.k8s.io`, kind `InferencePool`"] },
+    { name: "InferencePool", does: ["the vLLM pods selected by their labels, on their container port"] },
+    { name: "endpoint picker", does: ["reads each pod's metrics", "returns the pod to send this request to"] },
+    { name: "vLLM pod", does: ["`vllm serve <model>` on one GPU, `/health`, `/metrics`"] },
+  ]}
+/>
+
+And the scaling loop runs beside it:
+
+<Pipeline
+  label="The scaling loop from vLLM metrics to replica count"
+  from="vLLM `/metrics` on every pod"
+  to="Deployment `replicas`"
+  steps={[
+    { name: "Prometheus", does: ["scrapes `vllm:num_requests_waiting`"] },
+    { name: "KEDA", does: ["runs the trigger's query every `pollingInterval`", "decides 0 ↔ 1 on `activationThreshold`"] },
+    { name: "HPA", does: ["decides 1 ↔ N: query result ÷ `threshold`, rounded up", "smoothed by the stabilisation windows"] },
+  ]}
+/>
+
+## Mechanics
+
+### The production stack chart
+
+The vLLM project publishes a Helm chart for this, the production stack, which its docs describe as "an officially released, production-optimized codebase under the vLLM project". The install is two commands, `helm repo add vllm https://vllm-project.github.io/production-stack` and `helm install vllm vllm/vllm-stack -f <values file>`, and the values file lists models under `servingEngineSpec.modelSpec`. The documented keys include `modelURL` ("The LLM model that you want to use."), `replicaCount`, `requestCPU` and `requestMemory`, `requestGPU` ("Specifies the number of GPUs required.") and `pvcStorage` ("Allocates persistent storage for the model.").
+
+The course vendors chart 0.1.13 under `course/m6-serving-lab/fixtures/k8s/vllm-stack-0.1.13/`, with one change described in its `VENDORED.md`: the three optional subcharts (kube-prometheus-stack, prometheus-adapter, k8s-aibom, about 7.2 MB) are replaced by empty placeholder charts, because Helm refuses to render a chart whose `Chart.yaml` lists a dependency missing from `charts/`, even when that dependency is disabled. Your values files switch all three off explicitly.
+
+Rendering the chart shows what it does. With production values, `helm template` produces a router Deployment and Service, a vLLM Deployment and Service, a PVC, two PodDisruptionBudgets, RBAC objects for the router's pod discovery, and a Secret. In the vLLM Deployment, the chart's `vllmConfig` keys become `vllm serve` flags: `maxModelLen` becomes `--max-model-len`, `maxNumSeqs` becomes `--max-num-seqs`, `enablePrefixCaching` becomes `--enable-prefix-caching`. Two defaults in that render matter on a GPU cluster:
+
+- The rollout strategy is `maxSurge: 100%` with `maxUnavailable: 0`. A rollout of two replicas starts two new pods before it stops the old ones, so for the duration it needs four GPUs. On a cluster with exactly two GPUs, the new pods stay `Pending`, the rollout makes no progress, and after `progressDeadlineSeconds` (1200) the Deployment reports it as failed.
+- The startup probe allows `initialDelaySeconds: 15` plus 60 failures at 10-second intervals, about ten minutes, before Kubernetes restarts a container that is still loading weights. The readiness probe checks `/health` every 5 seconds after that.
+
+### Asking for a GPU
+
+A GPU is not a built-in resource. The Kubernetes docs say a vendor's device plugin makes the cluster expose "a custom schedulable resource such as `amd.com/gpu` or `nvidia.com/gpu`", and that "GPUs are only supposed to be specified in the `limits` section": you may give a limit without a request, since "Kubernetes will use the limit as the request value by default", and if you give both, "these two values must be equal". The chart writes `nvidia.com/gpu: "1"` into both. It writes a memory limit only when you set `limitMemory`; without it, in the chart's own words, "only GPU resources will have limits set equal to their requests".
+
+The pod also needs `runtimeClassName: nvidia` so that the container runs under NVIDIA's container runtime and sees the device; the chart's comment on that field reads "set to "nvidia" if the model requires GPU".
+
+The weights go on a volume. The chart sets `HF_HOME=/data` and mounts a PVC there, so a restarted pod finds the weights already downloaded. The access mode decides how replicas share it: a `ReadWriteOnce` claim can be mounted by one node at a time, so a second replica scheduled on another node cannot start. Either use `ReadWriteMany` storage, or give each replica its own claim.
+
+### The Hugging Face token
+
+Gated models need `HF_TOKEN`. The chart accepts it two ways, and the given `k8s/values-local.yaml` uses the wrong one, an inline string. Rendered, it becomes a chart-owned Secret:
+
+```yaml
+kind: Secret
+metadata:
+  name: "miubais-secrets"
+type: Opaque
+data:
+  hf_token_qwen35-08b: "aGZfUkVQTEFDRV9NRQ=="
+```
+
+That value is base64 of `hf_REPLACE_ME`, readable by anyone who can read Secrets in the namespace and by anyone who can read the values file in Git. The other form, `hf_token: {secretName, secretKey}`, makes the container read `HF_TOKEN` from a `secretKeyRef` to a Secret you create outside the chart, and the chart renders no token at all.
+
+### The checklist
+
+Stage 03's `checklist` encodes eight checks on every vLLM container and its Deployment: a GPU request, the `nvidia` runtime class, an HTTP readiness probe on `/health`, a PodDisruptionBudget whose selector matches the pod labels, a memory limit, the model cache on a PVC, `HF_TOKEN` from a `secretKeyRef` with no token in any rendered Secret, and `--max-model-len` in the command. The given local values pass only the first and third and fail the other six, which is why the stage asks for a production values file next to it.
+
+Each check stands for a specific failure. Without `--max-model-len` the context length "will be automatically derived from the model config" (vLLM's engine arguments), and a long native context leaves less KV cache for concurrent requests (lesson 02). Without a PDB, a node drain can evict every replica at once.
+
+### Validating offline with kubeconform
+
+`helm template` proves the chart renders; it does not prove the result is valid Kubernetes. kubeconform checks each resource against a JSON schema. Its README says that without `-schema-location`, or with it set to `default`, "kubeconform will default to downloading schemas from https://github.com/yannh/kubernetes-json-schema", and that custom resources "are not included in the default schema". So `default` needs the network and knows nothing about `InferencePool` or `ScaledObject`.
+
+The course vendors everything under `fixtures/k8s-schemas/`: the core Kubernetes v1.31.0 schemas in two variants (`v1.31.0-standalone` and `v1.31.0-standalone-strict`) and the CRD schemas for `gateway.networking.k8s.io`, `inference.networking.k8s.io` and `keda.sh`. `validate` passes exactly two locations, both templates under that directory: `{{ .NormalizedKubernetesVersion }}-standalone{{ .StrictSuffix }}/{{ .ResourceKind }}{{ .KindSuffix }}.json` for built-in kinds and `{{ .Group }}/{{ .ResourceKind }}_{{ .ResourceAPIVersion }}.json` for CRDs. No `default`, and no `-ignore-missing-schemas`, so a kind without a schema is an error rather than a silent skip.
+
+`-strict` does two things. The README describes the flag as "disallow additional properties not in schema or duplicated keys", and the template variable `StrictSuffix` is "-strict" or "" depending on the mode, so the flag also picks which vendored directory the core kinds come from. The CRD schemas exist in a strict form only, so `strict=False` relaxes the built-in kinds and nothing else: an unknown field in an `InferencePool` fails either way.
+
+A schema catches what a render cannot. Write the KEDA threshold as a YAML number instead of a string and the YAML is still well formed, but kubeconform answers (file path and schema URL shortened):
+
+```
+ScaledObject my-model is invalid: ... at '/spec/triggers/0/metadata/threshold': got number, want string
+```
+
+### Routing: Gateway, HTTPRoute, InferencePool
+
+A plain Kubernetes Service balances connections without looking at the pods. For LLM traffic that ignores the two things that decide latency: how long each replica's queue is and whether it already holds the request's prefix in cache. The chart's own router knows this; its `routingLogic` accepts `roundrobin`, `session`, `prefixaware`, `kvaware` and two disaggregated-prefill modes.
+
+The Gateway API Inference Extension moves that decision into the cluster's gateway. Its `InferencePool` "defines a group of Pods (containers) dedicated to serving AI models", and the docs are explicit that it "is not intended to be a mask of the Service object". Its fields:
+
+- `selector`: "The labels in this selector must exactly match the labels applied to your model server Pods." For the chart's pods those labels include `model: <modelSpec name>` and `helm-release-name: <release>`.
+- `targetPorts`: the container port vLLM listens on, 8000 in the chart.
+- `endpointPickerRef`: the endpoint picker (EPP) service, which the project calls "An implementation of an `Inference Router`". It has been optional since v1.5.0. `failureMode` says what the gateway does when the picker does not answer: `FailOpen` forwards to an endpoint the gateway chooses, `FailClose` refuses.
+
+An `HTTPRoute` attaches to the `Gateway` through `parentRefs` and names the pool as its backend, with `group: inference.networking.k8s.io` and `kind: InferencePool`. The Gateway itself comes from an implementation that supports the extension; the project names Envoy Gateway, kgateway and GKE Gateway. llm-d builds on the same pieces: its endpoint picker "scores and selects model server pods based on real-time metrics, KV-cache affinity, and configured policies". Stage 03 has no gateway controller, so its tests check that the four manifests validate and that their names and labels line up with the production render.
+
+### Scaling on the queue
+
+The vLLM metrics docs name the use case: "A common use case for our metrics is to support automated scaling of vLLM instances." CPU is the wrong signal for a GPU-bound process, and GPU utilisation stays high whenever a batch is running, whether one request is waiting behind it or fifty. `vllm:num_requests_waiting` counts the requests that have arrived but have no batch slot yet, which is the queue a user feels as time to first token.
+
+KEDA's Prometheus scaler turns that into a trigger: `serverAddress` ("Address of Prometheus server."), `query`, `threshold` ("Value to start scaling for. (This value can be a float)") and `activationThreshold` ("Target value for activating the scaler."). The default metric type is `AverageValue`, for which KEDA's spec gives the arithmetic: with a threshold of 5 and 20 messages queued, the HPA scales to 20 / 5 = 4 replicas "regardless of the current replica count". `threshold` is therefore the number of waiting requests one replica should carry.
+
+Two thresholds, two deciders. KEDA's concepts page splits scaling into an activation phase, when KEDA decides whether to scale "from/to zero", and a scaling phase, where "it is the HPA controller who takes the scaling decisions" for 1 to N. "If the minimum replicas is >= 1, the scaler is always active and the activation value will be ignored." The same split applies to the timers: `cooldownPeriod` (default 300 s) "only applies when scaling to 0", while scaling between other counts follows the HPA's `behavior`, which a ScaledObject passes through `advanced.horizontalPodAutoscalerConfig.behavior`.
+
+The HPA's stabilisation window is what stops flapping. When the metric says scale down, "the algorithm looks into previously computed desired states, and uses the highest value from the specified interval"; the default scale-down window is 300 seconds and the default scale-up window is 0. Stage 04's `simulate` applies the same rule in both directions, the lowest recommendation in the window when going up and the highest when going down, so that one high sample never adds a replica.
+
+The sample takes an invented 25-minute series of waiting requests, one sample a minute, with a one-minute spike to 14 at minute 5 and a surge from minute 10 to 15. The policy wants 4 waiting requests per replica, between 1 and 4 replicas. For each minute it prints the replica count that sample alone asks for, the lowest of those counts over a 120-second scale-up window and the highest over a 300-second scale-down window. It keeps no replica count and makes no decisions; the decisions are read off the rows below. The helper is a toy written for this lesson.
+
+Sample: `site/samples/m6/04-1.py`.
+
+```python
+from serving_lab_lessons.scaling import windowed_recommendations
+
+waiting = [2, 1, 3, 2, 1, 14, 2, 1, 2, 3, 10, 11, 12, 10, 11, 9, 3, 2, 1, 2, 1, 1, 2, 1, 1]
+series = [(minute * 60, w) for minute, w in enumerate(waiting)]
+policy = {"target": 4, "low": 1, "high": 4}
+
+rows = windowed_recommendations(series, **policy, up_window_s=120, down_window_s=300)
+print(f"{'minute':<16}" + "".join(f"{t // 60:>3}" for t, *_ in rows))
+print(f"{'waiting':<16}" + "".join(f"{w:>3}" for w in waiting))
+for label, column in [("each sample", 1), ("min over 120 s", 2), ("max over 300 s", 3)]:
+    print(f"{label:<16}" + "".join(f"{row[column]:>3}" for row in rows))
+```
+
+Output, run on 2026-10-22:
+
+```
+minute            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24
+waiting           2  1  3  2  1 14  2  1  2  3 10 11 12 10 11  9  3  2  1  2  1  1  2  1  1
+each sample       1  1  1  1  1  4  1  1  1  1  3  3  3  3  3  3  1  1  1  1  1  1  1  1  1
+min over 120 s    1  1  1  1  1  1  1  1  1  1  1  1  3  3  3  3  1  1  1  1  1  1  1  1  1
+max over 300 s    1  1  1  1  1  4  4  4  4  4  4  3  3  3  3  3  3  3  3  3  3  1  1  1  1
+```
+
+Without windows, the replica count follows the "each sample" row: 4 at minute 5, 1 at minute 6, 3 at minute 10 and 1 at minute 16. The spike starts three GPU pods and kills them a minute later, before any could have loaded its weights. With windows, a scale-up happens when the "min over 120 s" row rises above the current count and a scale-down when the "max over 300 s" row falls below it. Starting from 1, the spike never lifts the min row, so it changes nothing; the min row reaches 3 at minute 12, once three consecutive samples agree, which adds two replicas; the max row falls back to 1 at minute 21, so they stay until five quiet minutes have passed. Stability costs two minutes of reaction time on the way up, on top of the pods' start time. Stage 04 runs the same comparison on a full invented day (`fixtures/k8s/metrics-series.json`) and its tests expect exactly two decisions: up to 3 at 12:02 and down to 1 at 13:05.
+
+Both readings are open-loop: the series was recorded on one replica, so the waiting count does not fall when replicas are added. In a real cluster it would, which is one more reason the scale-down window needs to be long.
+
+## Common pitfalls
+
+- **Numbers in KEDA trigger metadata.** `threshold: 4` fails schema validation; the values are strings, `threshold: "4"`.
+- **An inline token in a values file.** It ends up base64-encoded in a rendered Secret and in Git. Reference a Secret you create separately.
+- **`ReadWriteOnce` weights for several replicas.** The second replica cannot mount the volume from another node and stays `Pending`.
+- **Forgetting the surge.** The chart's rollout starts a full new set of GPU pods before it stops the old ones; plan GPU capacity for twice the replicas or change the strategy.
+- **Expecting `cooldownPeriod` to slow every scale-down.** It covers only one to zero. Set `scaleDown.stabilizationWindowSeconds` for the rest; with the chart's own KEDA off, a `helm upgrade` also resets `replicas` under the HPA.
+- **`kubeconform -schema-location default` in CI.** It downloads schemas from GitHub and has none for CRDs; vendor the schemas you need.
+
+## What interviewers ask
+
+**Why not autoscale vLLM on CPU or GPU utilisation?**
+CPU says nothing about a GPU-bound process, and GPU utilisation stays high whenever any batch runs. The queue of requests waiting for a batch slot, `vllm:num_requests_waiting`, grows exactly when users start to wait for their first token, so it is the metric to divide by a per-replica target.
+
+**What does an InferencePool add over a Service?**
+A Service balances connections without looking at the pods. An InferencePool hands the choice to an endpoint picker that reads each model server's metrics, such as queue length and KV-cache use, and can prefer the replica that already holds the request's prefix. The HTTPRoute names the pool as its backend instead of a Service.
+
+**A spike of traffic lasts one minute. What should the autoscaler do?**
+Nothing. A new replica needs minutes to pull its image and load weights, so a replica started for a one-minute spike arrives after it and then sits idle on a GPU. A scale-up stabilisation window that takes the lowest recommendation over two minutes ignores it, and a longer scale-down window keeps a surge's replicas until the queue has been quiet for a while.
+
+**How do you validate manifests in CI without a cluster?**
+`helm template`, then kubeconform with `-strict` against schemas checked into the repository, CRDs included, and without `-ignore-missing-schemas`. Policy checks such as "the token comes from a Secret" run as a separate step, like stage 03's checklist.
+
+## Sources
+
+- [vLLM docs: Production stack](https://docs.vllm.ai/en/stable/deployment/integrations/production-stack/), page dated 2026-06-19, Helm commands and `modelSpec` keys, checked 2026-10-22
+- [vLLM docs: Engine arguments](https://docs.vllm.ai/en/stable/configuration/engine_args/), `--max-model-len`, checked 2026-10-22
+- [Kubernetes: Schedule GPUs](https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/), last modified 2024-09-20, checked 2026-10-22
+- [kubeconform README](https://github.com/yannh/kubeconform), version 0.8.0, sections on the default schema location, CRD support and schema-location template variables, checked 2026-10-22
+- [Gateway API Inference Extension](https://gateway-api-inference-extension.sigs.k8s.io/) and its [InferencePool page](https://gateway-api-inference-extension.sigs.k8s.io/api-types/inferencepool/), v1.6.2, checked 2026-10-22
+- [llm-d v0.10, Architecture](https://llm-d.ai/docs/0.10/architecture), section on the router and endpoint picker, checked 2026-10-22
+- [vLLM docs: Metrics](https://docs.vllm.ai/en/stable/design/metrics/), page dated 2026-10-12, section on autoscaling, checked 2026-10-22
+- KEDA v2.21: [Prometheus scaler](https://keda.sh/docs/latest/scalers/prometheus/), [ScaledObject specification](https://keda.sh/docs/latest/reference/scaledobject-spec/) and [Scaling Deployments](https://keda.sh/docs/latest/concepts/scaling-deployments/), checked 2026-10-22
+- [Kubernetes: Horizontal Pod Autoscaling](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/), sections Stabilization window and Default behavior, last modified 2026-08-03, checked 2026-10-22
+- Course code (repository files, not web sources): stages 03 and 04 in `course/m6-serving-lab/README.md`, the vendored chart and its `VENDORED.md` under `course/m6-serving-lab/fixtures/k8s/`, the vendored schemas in `course/m6-serving-lab/fixtures/k8s-schemas/`, the lesson helpers in `course/m6-serving-lab/lesson_support/src/serving_lab_lessons/scaling.py`

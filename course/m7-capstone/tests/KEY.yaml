@@ -1,0 +1,18 @@
+decisions:
+  pr-01: merge
+  pr-02: block
+  pr-03: hold
+  pr-04: block
+  pr-05: block
+  pr-06: hold
+  pr-07: block
+  pr-08: block
+  pr-09: block
+  pr-10: block
+  pr-11: hold
+  pr-12: block
+auto_block_required:
+  - secret-in-code
+  - migration-number-collision
+auto_block_forbidden:
+  - style

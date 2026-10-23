@@ -1,0 +1,182 @@
+---
+title: A harness is a loop plus a policy
+description: The agent loop decides what to try next; the harness around it decides what is allowed to happen, and only hooks, rules, modes and caps make that decision binding.
+module: m1
+order: 1
+verified_on: 2026-10-17
+executed: local
+pins:
+  "pypi:claude-agent-sdk": "0.2.168"
+  "model:default": claude-opus-5-5
+sources:
+  - url: https://code.claude.com/docs/en/agent-sdk/agent-loop
+    title: How the agent loop works
+    checked: 2026-10-17
+  - url: https://code.claude.com/docs/en/agent-sdk/permissions
+    title: Configure permissions
+    checked: 2026-10-17
+  - url: https://code.claude.com/docs/en/agent-sdk/hooks
+    title: Intercept and control agent behavior with hooks
+    checked: 2026-10-17
+  - url: https://code.claude.com/docs/en/agent-sdk/user-input
+    title: Handle approvals and user input
+    checked: 2026-10-17
+  - url: https://code.claude.com/docs/en/agent-sdk/python
+    title: Agent SDK reference - Python
+    checked: 2026-10-17
+  - url: https://code.claude.com/docs/en/permission-modes
+    title: Choose a permission mode
+    checked: 2026-10-17
+  - url: https://www.anthropic.com/engineering/building-effective-agents
+    title: Building effective agents
+    published: 2024-12-19
+    checked: 2026-10-17
+  - url: https://claude.com/resources/articles/building-agents-with-the-claude-agent-sdk
+    title: Building agents with the Claude Agent SDK
+    published: 2025-09-29
+    checked: 2026-10-17
+---
+
+import Pipeline from "../../../components/diagrams/Pipeline.astro";
+
+**Prerequisites:** you have run `query()` with your own tools and options; if the message stream is new to you, read [How the agent loop works](https://code.claude.com/docs/en/agent-sdk/agent-loop) first.
+
+## Why this matters for the factory
+
+An AI software factory hands tickets to an agent and expects a diff back without a person approving each step. Nobody is watching the terminal, so every safety property you care about has to be true without a human in the loop: the agent edits only the code it was asked to change, it does not push, it does not delete a directory because a log line suggested it, and it stops before it has spent more than the ticket is worth. Anthropic's "Building effective agents" puts the cost of autonomy plainly: agents mean "higher costs, and the potential for compounding errors", and it recommends testing in sandboxed environments "along with the appropriate guardrails" and stopping conditions such as a maximum number of iterations.
+
+A prompt can ask for all of that. It cannot guarantee any of it. The model reads the system prompt as guidance and weighs it against everything else in its context, including file contents and tool output that may say the opposite. The harness applies its rules whatever the model concludes. This module builds one around the Claude Agent SDK, and this lesson draws the line between the two halves: the loop that decides what to try, and the policy that decides what is allowed to happen.
+
+## Core idea
+
+The agent loop is the same cycle in every SDK session: Claude receives the prompt, answers with text and tool calls, the SDK runs the tools and feeds the results back, and this repeats until a response contains no tool call (How the agent loop works). The "Building agents with the Claude Agent SDK" article describes the same loop as "gather context -> take action -> verify work -> repeat". Policy acts on the middle step, when a tool call is about to run.
+
+A harness wraps that step. Before a tool runs, the SDK asks a fixed sequence of questions, and your policy lives in the answers:
+
+<Pipeline
+  label="How the Agent SDK decides whether a tool call runs"
+  from="model proposes a tool call"
+  to="tool runs, or the model receives the denial reason as the tool result"
+  note="Caps are checked as the loop goes on: `max_turns`, `max_budget_usd`."
+  steps={[
+    { name: "1 hooks", does: ["`PreToolUse`: your code; may deny, allow, ask, defer or rewrite"] },
+    { name: "2 deny rules", does: ["`disallowed_tools`, settings deny rules"] },
+    { name: "3 ask rules", does: ["settings ask rules → `canUseTool`"] },
+    { name: "4 permission mode", does: ["`default`, `dontAsk`, `acceptEdits`, `plan`, `auto`, `bypassPermissions`"] },
+    { name: "5 allow rules", does: ["`allowed_tools`, settings allow rules"] },
+    { name: "6 canUseTool", does: ["callback, only if nothing above decided; skipped in `dontAsk`"] },
+  ]}
+/>
+
+That order is from the permissions page (Configure permissions). Two properties of it matter here. Hooks run first, and a hook deny holds even in `bypassPermissions` mode. A hook allow is weaker than it looks: deny and ask rules are still evaluated after it, and it cannot approve the actions that no mode auto-approves, such as an `rm` of a critical path (Configure permissions; Choose a permission mode).
+
+The prompt tells the model what a good fix looks like, the policy makes the bad outcomes impossible or at least loud, the caps make the run end, and the report afterwards says what ended it.
+
+## Mechanics
+
+### The four surfaces that enforce
+
+**`allowed_tools` and `disallowed_tools`.** These add entries to the allow and deny rule lists. A bare name in `disallowed_tools`, such as `"Bash"`, removes the tool from the request so Claude never sees it. A scoped rule such as `"Bash(rm *)"` keeps the tool and denies matching calls in every mode, including `bypassPermissions`. What they cannot do: `allowed_tools` auto-approves but does not restrict, so any unlisted tool is still available and falls through to the mode (Configure permissions). Scoped Bash rules match the command as written; the permissions page notes that `Bash(rm *)` lets `/bin/rm` fall through to the mode.
+
+**Permission modes.** The mode is the global default for whatever the rules did not decide. `dontAsk` turns every would-be prompt into a denial and never calls `canUseTool`; `bypassPermissions` approves everything that reaches the mode step, whatever `allowed_tools` says (Configure permissions). What modes cannot do: they know categories, not your repository. `acceptEdits` approves file edits inside the working directory, which for a ticket runner is the whole repository, tests included.
+
+**Hooks.** A `PreToolUse` callback sees the tool name, the full input, the session id and the working directory, and it can return a deny with a reason the model reads (Intercept and control agent behavior with hooks). It is the only surface where you run arbitrary code against the real arguments, so it is where "resolve the path, then check it is under `src/`" belongs. What hooks cannot do: they only catch what their matcher and code check for. A matcher of `Write|Edit` never runs for a file written through Bash, the hooks page warns. A callback that times out is cancelled (the default is 600 seconds for most events); for `PreToolUse` the call is blocked, which is the safe direction. A callback that raises is your bug, so wrap it and deny on any exception. The hooks page also notes that hooks may not fire when the run hits `max_turns`, so do not put your only bookkeeping there.
+
+**`can_use_tool`.** This callback is the SDK's replacement for the interactive permission prompt, and it fires only when nothing earlier in the flow decided (Agent SDK reference - Python). Calls approved by `allowed_tools`, by a settings allow rule, or by `acceptEdits` or `bypassPermissions` never reach it, and `dontAsk` skips it entirely. In Python it also needs a streaming prompt and a placeholder `PreToolUse` hook to keep the stream open, as the user-input guide's example shows (Handle approvals and user input). It is the right place for a human approval step in an interactive product. It is the wrong place for a check that must run on every call.
+
+### Caps
+
+`max_turns` counts tool-use round trips; `max_budget_usd` stops the run when the client-side cost estimate reaches the value. Either one ends the loop with a `ResultMessage` whose `subtype` is `error_max_turns` or `error_max_budget_usd` (How the agent loop works). The budget is checked after each response arrives, so spend can pass the cap by up to the cost of that response plus whatever running subagents spend before they stop: leave headroom. A caller that reads only `result` or only the last assistant text will report these runs as successes. Read `subtype`, and read `terminal_reason` as well: the Python reference notes that when the final request fails, for example on an API error, the result says `success` with the cause in `terminal_reason`.
+
+### The running example: one tinyshop ticket
+
+The exercise for this module, the enforced harness lab, builds a ticket runner for `tinyshop`, a tiny shop library with three planted bugs. Ticket `001-discount-rounding` says discounted totals round half-cents the wrong way. The runner in stage 08 starts the agent with this policy:
+
+- `cwd` is a fresh git copy of the repository; `setting_sources=[]`, so no user or project settings file can loosen the policy.
+- `allowed_tools` lists Read, Grep, Glob, Edit, Write and Bash, and `permission_mode="dontAsk"`, so anything else that would prompt is denied.
+- A `PreToolUse` hook enforces a guard: writes only under `src/`, Bash commands checked against blocked patterns (`rm -rf`, `git push`, `sudo`, `curl ... | sh`) and against redirects that land outside `src/`.
+- Caps of 12 turns and 0.75 USD.
+
+The system prompt asks the model to edit only `src/` and to check its fix with the ticket's test. The guard makes the first half of that true whatever the model decides. The ticket's test carries a strict `xfail` marker, so once the fix works the test reports an unexpected pass and the suite goes red, and the tempting move is to delete the marker. A write to `tests/` resolves outside `src/` and is denied, and the denial reason comes back to the model as the tool result.
+
+The reference solution's run on 2026-10-17, against the real SDK on `claude-opus-5-5`, ended with `subtype` `success` after 8 assistant messages (a turn can span several) and an estimated 0.21 USD, well inside both caps. The diff touched one file, `src/tinyshop/pricing.py`, switching the rounding to `ROUND_HALF_UP`; the ticket's test passed and the rest of the suite stayed green. The stage asserts it: the run summary must say `success`, the ticket test must pass, and `git status` must show changes only under `src/`. These run numbers are from the course's own build-time run, not from a web source.
+
+### The guard as a decision table
+
+The sample below asks a guard for six decisions. It uses `decide` from `course/m1-harness-lab/lesson_support/` (helpers written for these lessons, not the exercise solution) with the writable root `/work/tinyshop/src`. No model is called; run it from the repository root with `PYTHONPATH=course/m1-harness-lab/starter/src:course/m1-harness-lab/lesson_support/src uv run --frozen python site/samples/m1/01-1.py`.
+
+Sample: `site/samples/m1/01-1.py`.
+
+```python
+from pathlib import Path
+
+from harness_lab_lessons import decide
+
+REPO = Path("/work/tinyshop")
+ROOTS = [REPO / "src"]
+
+calls = [
+    ("Write", {"file_path": "src/tinyshop/pricing.py"}),
+    ("Write", {"file_path": "src/../tests/test_pricing.py"}),
+    ("Bash", {"command": "rm -rf build"}),
+    ("Bash", {"command": "pytest -q > /tmp/report.txt"}),
+    ("Read", {"file_path": "/etc/hosts"}),
+    ("WebFetch", {"url": "https://example.com"}),
+]
+
+for tool, args in calls:
+    ruling = decide(tool, args, ROOTS, cwd=REPO)
+    shown = next(iter(args.values()))
+    verdict = "allow" if ruling.allowed else "DENY"
+    print(f"{verdict:<5} {tool:<8} {shown:<30} {ruling.reason}")
+```
+
+Output, run on 2026-10-17:
+
+```
+allow Write    src/tinyshop/pricing.py        src/tinyshop/pricing.py resolves under an allowed root
+DENY  Write    src/../tests/test_pricing.py   src/../tests/test_pricing.py resolves outside every allowed root
+DENY  Bash     rm -rf build                   command matches banned pattern rm\s+-rf
+DENY  Bash     pytest -q > /tmp/report.txt    output redirected to /tmp/report.txt, outside every allowed root
+allow Read     /etc/hosts                     reads have no side effects
+DENY  WebFetch https://example.com            WebFetch is not on the known list, denied by default
+```
+
+Row two is the one a string check gets wrong: `src/../tests/test_pricing.py` starts with `src/`, and only resolving it shows that it lands in `tests/`. Row four is a write that never names a write tool; a matcher of `Write|Edit` would not have seen it. Row five allows a read outside the root on purpose: in this policy reads have no side effects, and a stricter policy would bound them too. Row six denies by default, because a guard that allows unknown tools turns every new tool into a hole.
+
+## Common pitfalls
+
+- **Treating `allowed_tools` as an allowlist.** It pre-approves; unlisted tools still exist and fall through to the mode, and under `bypassPermissions` they all run. Pair the list with `dontAsk`, and remove tools you never want with bare names in `disallowed_tools` (Configure permissions).
+- **Checking paths as strings.** `startswith("src/")` approves `src/../tests/x.py`. Resolve against `cwd` first, then compare against resolved roots.
+- **Guarding Write and Edit but not Bash.** `sed -i`, `tee` and `>` write files too. Either remove Bash, or parse it and accept that the parse is best effort, and keep the run inside a sandbox or a throwaway copy.
+- **A guard that can raise.** If the callback throws, what happens to the call depends on the SDK's error path, not on your policy. Wrap the body and return a deny with the exception text; a guard that fails open is worse than none, because you believe it is there.
+- **Reporting success from the last message.** A run that hit `max_turns` can end with a confident paragraph. Decide the outcome from `subtype` and `terminal_reason`.
+
+## What interviewers ask
+
+**What is the difference between a prompt instruction and a harness rule?**
+A prompt instruction is input the model weighs against the rest of its context, so file contents or tool output can talk it out of it. A harness rule runs in your process before the tool does, and a `PreToolUse` deny holds whatever the model believes.
+
+**Why does `allowed_tools=["Read"]` not make an agent read-only?**
+Because it only pre-approves Read; other tools stay available and fall through to the permission mode, which in `bypassPermissions` approves them. Use `dontAsk` with the allow list, and bare-name `disallowed_tools` for tools that must not exist.
+
+**When does `can_use_tool` run, and when should you not rely on it?**
+Only when no hook, rule or mode decided the call first, and never in `dontAsk`. It suits interactive approval; policy that must see every call belongs in a hook.
+
+**How do you make sure an unattended agent stops?**
+Set `max_turns` and `max_budget_usd`, leave headroom because the budget is checked after each response, and treat `error_max_turns` and `error_max_budget_usd` as failures in your report. Check `terminal_reason` as well, because an API error can end a run whose `subtype` says `success`.
+
+**Your hook denies writes outside `src/`. How can the agent still change a test file?**
+Through Bash (`sed -i`, a redirect, a script it writes and runs) or through a path the hook compares as a string. Guard Bash too, resolve paths before comparing, and treat the parse as best effort inside an isolated copy.
+
+## Sources
+
+- [How the agent loop works](https://code.claude.com/docs/en/agent-sdk/agent-loop), checked 2026-10-17
+- [Configure permissions](https://code.claude.com/docs/en/agent-sdk/permissions), checked 2026-10-17
+- [Intercept and control agent behavior with hooks](https://code.claude.com/docs/en/agent-sdk/hooks), checked 2026-10-17
+- [Handle approvals and user input](https://code.claude.com/docs/en/agent-sdk/user-input), checked 2026-10-17
+- [Agent SDK reference - Python](https://code.claude.com/docs/en/agent-sdk/python), checked 2026-10-17
+- [Choose a permission mode](https://code.claude.com/docs/en/permission-modes), checked 2026-10-17
+- [Building effective agents](https://www.anthropic.com/engineering/building-effective-agents), published 2024-12-19, checked 2026-10-17
+- [Building agents with the Claude Agent SDK](https://claude.com/resources/articles/building-agents-with-the-claude-agent-sdk), published 2025-09-29, checked 2026-10-17
+- Course code (repository files, not web sources): the lesson helpers in `course/m1-harness-lab/lesson_support/src/harness_lab_lessons/` and the stage 08 test in `course/m1-harness-lab/tests/test_08_live_ticket.py`

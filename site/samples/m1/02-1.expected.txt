@@ -1,0 +1,5 @@
+Edit -> {}
+Bash -> {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "command matches banned pattern git\\s+push"}}
+matcher: Write|Edit|MultiEdit|NotebookEdit|Bash timeout: 30 callbacks: 1
+mode: dontAsk denied: ['WebFetch', 'Bash(git push *)']
+settings loaded: []

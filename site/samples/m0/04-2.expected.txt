@@ -1,0 +1,7 @@
+history input per conversation: 2800 tokens
+no cache                 $0.13120/conversation  $7,872/month
+5m, every gap short      $0.06880/conversation  $4,128/month
+5m, every gap long       $0.15520/conversation  $9,312/month
+1h, every gap under 1h   $0.08680/conversation  $5,208/month
+5m, 40% long gaps        $0.10336/conversation  $6,202/month
+5m or 1h by gap          $0.07600/conversation  $4,560/month

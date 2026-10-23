@@ -1,0 +1,338 @@
+---
+title: Subagents
+description: How AgentDefinition subagents isolate context, inherit permissions and spend money, and how to run a read-only reviewer whose verdict is bound to a JSON schema.
+module: m1
+order: 3
+verified_on: 2026-10-17
+executed: local
+pins:
+  "pypi:claude-agent-sdk": "0.2.168"
+  "model:default": claude-opus-5-5
+sources:
+  - url: https://code.claude.com/docs/en/agent-sdk/subagents
+    title: Subagents in the SDK
+    checked: 2026-10-17
+  - url: https://code.claude.com/docs/en/agent-sdk/python
+    title: Agent SDK reference - Python
+    checked: 2026-10-17
+  - url: https://code.claude.com/docs/en/agent-sdk/permissions
+    title: Configure permissions
+    checked: 2026-10-17
+  - url: https://code.claude.com/docs/en/agent-sdk/hooks
+    title: Intercept and control agent behavior with hooks
+    checked: 2026-10-17
+  - url: https://code.claude.com/docs/en/agent-sdk/structured-outputs
+    title: Get structured output from agents
+    checked: 2026-10-17
+  - url: https://code.claude.com/docs/en/agent-sdk/cost-tracking
+    title: Track cost and usage
+    checked: 2026-10-17
+  - url: https://code.claude.com/docs/en/agent-sdk/typescript
+    title: Agent SDK reference - TypeScript
+    checked: 2026-10-17
+  - url: https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
+    title: Effective context engineering for AI agents
+    published: 2025-09-29
+    checked: 2026-10-17
+  - url: https://www.anthropic.com/engineering/building-effective-agents
+    title: Building effective agents
+    published: 2024-12-19
+    checked: 2026-10-17
+---
+
+import Pipeline from "../../../components/diagrams/Pipeline.astro";
+
+**Prerequisites:** [lesson 02](../02-hooks-permissions-and-modes/), because a subagent runs inside the same hooks, rules and modes, and you need to know which of them it inherits.
+
+## Why this matters for the factory
+
+A factory that ships agent-written diffs needs a second opinion before merge, and it needs that opinion to be cheap, independent and machine-readable. Subagents give you the first two. A reviewer subagent starts from a fresh context, so it judges the diff rather than the story the coding agent told itself, and it can run on a cheaper model or in parallel with other reviewers. A JSON schema on the final result gives you the third: a verdict your pipeline can gate on, instead of a paragraph someone has to read.
+
+Subagents also multiply what can go wrong. Each one makes its own model calls, which land on the same bill; each one runs tools, which must obey the same policy; and a subagent can spawn subagents of its own.
+
+## Core idea
+
+A subagent is a separate agent instance the main agent starts through the `Agent` tool (Subagents in the SDK). It gets its own conversation: its system prompt is `AgentDefinition.prompt`, its first user turn is the prompt string the parent wrote into the `Agent` call, and it sees the tool definitions it was given. It does not see the parent's conversation history, tool results or system prompt. When it finishes, only its final message goes back to the parent, as the `Agent` tool's result. The subagents page lists four benefits: context isolation, parallelization, specialized instructions and tool restrictions.
+
+<Pipeline
+  label="A parent run delegates review to a subagent"
+  from="parent: ticket runner, cwd = repo, `PreToolUse` guard, `dontAsk`"
+  to="`ResultMessage.structured_output`"
+  steps={[
+    { name: "call", does: ['`Agent(subagent_type="diff-reviewer", prompt="review the diff for ticket 001")`'] },
+    {
+      name: "diff-reviewer",
+      does: ["own context; tools = `Read`, `Grep`, `Glob`", "inherits the guard and the mode", "reads dozens of files, returns its final message only"],
+    },
+    { name: "parent", does: ["writes the verdict that `output_format` validates"] },
+  ]}
+/>
+
+The context engineering post describes the same trade: a subagent "might explore extensively, using tens of thousands of tokens or more, but returns only a condensed, distilled summary of its work (often 1,000-2,000 tokens)" (Effective context engineering for AI agents). The parent pays for the exploration once and keeps only the conclusion in its own context. The flip side is that the parent cannot check what it did not see, so a reviewer must report evidence (file, line, note) rather than an opinion.
+
+"Building effective agents" names two patterns that this composes: parallelization, where independent checks run at once and their outputs are aggregated, and evaluator-optimizer, where one model produces and another evaluates. A reviewer subagent is the evaluator half.
+
+## Mechanics
+
+### `AgentDefinition`
+
+The Python dataclass has thirteen fields (Agent SDK reference - Python):
+
+- `description` (required): when the parent should use this agent. Claude matches tasks to agents on it, so write it as a trigger, not a job title.
+- `prompt` (required): the agent's system prompt.
+- `tools`: the allowed tool names. Omitted, the agent inherits every tool available to subagents; listed, it gets only those, and a tool left out is simply not in its session.
+- `disallowedTools`: tool names to remove; MCP server patterns such as `mcp__server__*` work too.
+- `model`: an alias such as `"sonnet"`, `"opus"`, `"haiku"`, `"inherit"`, or a full model id.
+- `skills`, `memory`, `mcpServers`: preloaded skills, a memory source, and MCP servers for this agent.
+- `initialPrompt`: used only when the agent runs as the main thread agent; ignored for subagents.
+- `maxTurns`: a turn cap for the agent. At the cap, Claude Code returns its output marked as partial.
+- `background`: force background execution. Subagents run in the background by default, and Claude asks for foreground when it needs the result before continuing (Subagents in the SDK).
+- `effort` and `permissionMode`: reasoning effort and a permission mode, the latter subject to the inheritance rules below.
+
+The names are camelCase because they map to the wire format shared with TypeScript, unlike the snake_case `ClaudeAgentOptions`. Passing `max_turns=` raises a `TypeError` at construction, which the sample shows.
+
+### What a subagent inherits
+
+Permissions: a subagent runs in the parent session's permission mode. Its own `permissionMode` applies only when the parent is in `default`, `dontAsk` or `plan`, a `"bypassPermissions"` value is never applied, and a subagent runs in `bypassPermissions` only when the parent does (Configure permissions). Permission rules are inherited from the parent conversation too (Intercept and control agent behavior with hooks). Your `PreToolUse` guard runs on the subagent's tool calls; inside a subagent the Python hook input carries the optional `agent_id` and `agent_type` fields, so the guard can apply a stricter policy per agent type.
+
+Context: the subagent receives its own prompt, the `Agent` call's prompt, the tool definitions, and the project `CLAUDE.md` when `setting_sources` loads it. The parent's history is not included, so put file paths, the ticket text and the acceptance check into the `Agent` prompt. Since Claude Code v2.1.210, the subagent's final message is scanned for instruction-shaped text, such as imitated control tags or turn markers, before the parent reads it (Subagents in the SDK). That reduces, but does not remove, the chance that a poisoned file read by the subagent steers the parent.
+
+### Why the reviewer is read-only
+
+A reviewer with Edit or Bash can fix what it finds, and then its verdict describes a diff that no longer exists, and the change it made went through no review at all. It can also be talked into acting on instructions it read in the repository. Give it `tools=["Read", "Grep", "Glob"]` and nothing else; the subagents page's own example of a code reviewer uses that set. The guard still applies, but a tool that is not in the session needs no denial.
+
+### `SubagentStart` and `SubagentStop`
+
+`SubagentStart` fires when the parent spawns or resumes a subagent; its input carries `agent_id` and `agent_type`, and its matcher filters on the agent type. `SubagentStop` fires when the subagent completes; its input carries `agent_id`, `agent_type`, `agent_transcript_path` and `stop_hook_active` (Agent SDK reference - Python). Use the first to count fan-out and refuse an unexpected agent type, and the second to archive the transcript path with the ticket, which is where you look when a verdict seems wrong.
+
+### Binding the verdict to a schema
+
+`output_format={"type": "json_schema", "schema": ...}` asks the SDK to validate the query's final output against the schema and re-prompt on mismatch; the validated object arrives as `ResultMessage.structured_output` (Get structured output from agents). It constrains the final result of the query, which the parent writes after the reviewer reports. If validation never succeeds, the result has subtype `error_max_structured_output_retries`. The page also warns that a result can say `success` with no `structured_output`, and says to treat that as a failure too. Validate the object again in your own code before you gate a merge on it: the schema checks shape, and your parser checks that the severities and lines make sense for your pipeline.
+
+The sample defines the reviewer and the options and prints the verdict schema the exercise uses (its stage 06 tests pin the same schema; this copy is in the lesson helpers). Run it with `PYTHONPATH=course/m1-harness-lab/starter/src:course/m1-harness-lab/lesson_support/src uv run --frozen python site/samples/m1/03-1.py`; nothing calls a model.
+
+Sample: `site/samples/m1/03-1.py`.
+
+```python
+import json
+
+from claude_agent_sdk import AgentDefinition, ClaudeAgentOptions
+from harness_lab_lessons import review_verdict_schema
+
+WRITERS = {"Write", "Edit", "MultiEdit", "NotebookEdit", "Bash"}
+
+reviewer = AgentDefinition(
+    description="Checks a finished ticket diff for bugs. Use once the fix is in place.",
+    prompt=(
+        "Inspect the uncommitted changes in this repository and the code they touch. "
+        "Do not change any file. For each problem give file, line, severity and a short note, "
+        "and approve only if you found nothing critical or important."
+    ),
+    tools=["Read", "Grep", "Glob"],
+    model="sonnet",
+    maxTurns=8,
+)
+options = ClaudeAgentOptions(
+    cwd="/work/tinyshop",
+    agents={"diff-reviewer": reviewer},
+    allowed_tools=["Read", "Grep", "Glob", "Agent"],
+    permission_mode="dontAsk",
+    setting_sources=[],
+    max_budget_usd=0.30,
+    output_format={"type": "json_schema", "schema": review_verdict_schema()},
+)
+
+try:
+    AgentDefinition(description="d", prompt="p", max_turns=8)
+except TypeError as err:
+    print("snake_case field:", err)
+
+print("agents:", list(options.agents))
+print("reviewer tools:", reviewer.tools, "max turns:", reviewer.maxTurns, "model:", reviewer.model)
+print("write-capable tools:", sorted(WRITERS & set(reviewer.tools)))
+print("output_format type:", options.output_format["type"])
+print(json.dumps(options.output_format["schema"], indent=2))
+```
+
+Output, run on 2026-10-17:
+
+```
+snake_case field: AgentDefinition.__init__() got an unexpected keyword argument 'max_turns'
+agents: ['diff-reviewer']
+reviewer tools: ['Read', 'Grep', 'Glob'] max turns: 8 model: sonnet
+write-capable tools: []
+output_format type: json_schema
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "approve",
+    "findings"
+  ],
+  "properties": {
+    "approve": {
+      "type": "boolean"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "file",
+          "line",
+          "severity",
+          "note"
+        ],
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "severity": {
+            "enum": [
+              "critical",
+              "important",
+              "minor"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Both levels of the schema set `additionalProperties: false` and list every key as required, so an extra `confidence` field or a missing `note` fails validation instead of passing silently. The severity is an enum, which keeps the gate rule simple: block the merge on any `critical` or `important` finding.
+
+For a parallel review, define several read-only agents, for example one for correctness and one for test coverage, and tell the parent to run both and merge their findings into one verdict. They finish in the time of the slowest rather than the sum (Subagents in the SDK), and the schema is still validated once, on the merged result.
+
+### Accounting across subagents
+
+The three cost fields on the result count different things (Track cost and usage). `usage` covers the top-level loop only and excludes subagents. `total_cost_usd` includes subagent requests. `model_usage` includes them too, broken down by model, with a `costUSD` estimate per model. All of them are client-side estimates, not billing data. `max_budget_usd` covers subagents: once spend reaches it, spawning another subagent fails with `Budget limit reached`, running background subagents are stopped, and the query ends with `error_max_budget_usd`. Depth and concurrency have their own limits, set through `env`: `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` (default 3 layers) and `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` (default 20) (Subagents in the SDK).
+
+`permission_denials` on the result lists denied calls; the TypeScript reference types each entry as `tool_name`, `tool_use_id` and `tool_input` and calls the field the authoritative record of denials (Agent SDK reference - TypeScript). Neither reference says whether denials made by your own `PreToolUse` hook are always listed there, so count those in the hook as well.
+
+The second sample feeds a scripted run through `summarise_messages` from the lesson helpers: the parent tries to edit a test, is denied, delegates to a reviewer on Sonnet, and finishes with a verdict. The numbers are synthetic, picked to show the fields. Run it the same way, with `site/samples/m1/03-2.py`.
+
+Sample: `site/samples/m1/03-2.py`.
+
+```python
+from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock, ToolUseBlock
+from harness_lab_lessons import summarise_messages
+
+PARENT, REVIEWER = "claude-opus-5-5", "claude-sonnet-5-5"
+
+messages = [
+    AssistantMessage(
+        [ToolUseBlock("toolu_01", "Edit", {"file_path": "/work/tinyshop/tests/test_pricing.py"})],
+        model=PARENT,
+    ),
+    AssistantMessage(
+        [ToolUseBlock("toolu_02", "Agent", {"subagent_type": "diff-reviewer", "prompt": "Review"})],
+        model=PARENT,
+    ),
+    AssistantMessage([TextBlock("The reviewer found one problem.")], model=PARENT),
+    ResultMessage(
+        subtype="success",
+        duration_ms=41_000,
+        duration_api_ms=37_500,
+        is_error=False,
+        num_turns=3,
+        session_id="11111111-2222-4333-8444-555555555555",
+        total_cost_usd=0.1840,
+        usage={"input_tokens": 9_200, "output_tokens": 1_100},
+        model_usage={
+            PARENT: {"inputTokens": 9_200, "outputTokens": 1_100, "costUSD": 0.1210},
+            REVIEWER: {"inputTokens": 21_000, "outputTokens": 800, "costUSD": 0.0630},
+        },
+        permission_denials=[
+            {
+                "tool_name": "Edit",
+                "tool_use_id": "toolu_01",
+                "tool_input": {"file_path": "/work/tinyshop/tests/test_pricing.py"},
+            }
+        ],
+        structured_output={
+            "approve": False,
+            "findings": [
+                {
+                    "file": "src/tinyshop/pricing.py",
+                    "line": 14,
+                    "severity": "important",
+                    "note": "rounding mode changed but the cart total still uses round()",
+                }
+            ],
+        },
+        terminal_reason="completed",
+    ),
+]
+
+facts = summarise_messages(messages, max_turns=12, max_usd=0.30)
+result = messages[-1]
+print(f"stopped_by={facts.stopped_by} turns={facts.turns} cost=${facts.cost_usd:.4f}")
+for model, usd in facts.cost_by_model.items():
+    print(f"  {model:<18} ${usd:.4f}  {usd / facts.cost_usd:.0%}")
+print("main-loop input tokens in usage:", result.usage["input_tokens"])
+print("denials:", facts.denials, [d["tool_input"]["file_path"] for d in result.permission_denials])
+verdict = result.structured_output
+print("approve:", verdict["approve"], "findings:", [f["severity"] for f in verdict["findings"]])
+```
+
+Output, run on 2026-10-17:
+
+```
+stopped_by=success turns=3 cost=$0.1840
+  claude-opus-5-5    $0.1210  66%
+  claude-sonnet-5-5  $0.0630  34%
+main-loop input tokens in usage: 9200
+denials: 1 ['/work/tinyshop/tests/test_pricing.py']
+approve: False findings: ['important']
+```
+
+A third of this run's estimated cost is the reviewer, and none of it appears in `usage`, which reports only the parent's 9,200 input tokens. A dashboard built on `usage` would show reviews as free. The denial is the parent's attempt on the test file, and the verdict blocks the merge even though the run's `subtype` is `success`: a run that completed and a change that may ship are different questions, and the report should answer both.
+
+## Common pitfalls
+
+- **A reviewer with inherited tools.** Omitting `tools` gives it every tool available to subagents, Edit and Bash included. List the read-only tools explicitly.
+- **Assuming the subagent knows the ticket.** It starts without the parent's history. Put the ticket, the paths and the acceptance check in the `Agent` prompt or in the agent's own prompt.
+- **Reading `usage` for cost.** It excludes subagents. Use `total_cost_usd` for the run and `model_usage` for the split by model.
+- **Unbounded fan-out.** A prompt that invites delegation can spawn a tree of agents. Set `max_budget_usd`, and lower the depth and concurrency limits through `env` for unattended runs.
+- **Trusting `success` as the verdict.** Check `structured_output` is present and parse it; `error_max_structured_output_retries` and a missing object are both failures.
+- **snake_case fields on `AgentDefinition`.** `max_turns=` and `disallowed_tools=` raise `TypeError`; the dataclass uses `maxTurns` and `disallowedTools`.
+
+## What interviewers ask
+
+**Why use a subagent for review instead of asking the same agent to check its work?**
+The subagent starts from a fresh context with only the diff and the task, so it is not anchored on the coding agent's reasoning, and it can run on a different model or tool set. Its final report is all that returns, which keeps the parent's context small.
+
+**How do permissions apply to subagents?**
+They inherit the parent's permission mode and rules, and your hooks fire on their tool calls with `agent_id` and `agent_type` in the input. A subagent's own `permissionMode` applies only under a `default`, `dontAsk` or `plan` parent, and never as `bypassPermissions`.
+
+**How do you get a machine-checkable verdict out of a review agent?**
+Set `output_format` with a strict JSON schema and read `ResultMessage.structured_output`, treating `error_max_structured_output_retries` or a missing object as failure. Then parse it in your own code before gating a merge on it.
+
+**Where does subagent spend show up?**
+In `total_cost_usd` and in `model_usage` per model, not in `usage`, which covers only the top-level loop. `max_budget_usd` includes subagent spend and refuses new subagents once it is reached.
+
+**What would you log per subagent?**
+`agent_id` and `agent_type` from `SubagentStart`, and `agent_transcript_path` from `SubagentStop`, which is the only one of the two that carries it, plus the cost split from `model_usage`. With the transcript path stored next to the ticket, a wrong verdict can be traced to what the reviewer actually read.
+
+## Sources
+
+- [Subagents in the SDK](https://code.claude.com/docs/en/agent-sdk/subagents), checked 2026-10-17
+- [Agent SDK reference - Python](https://code.claude.com/docs/en/agent-sdk/python), checked 2026-10-17
+- [Configure permissions](https://code.claude.com/docs/en/agent-sdk/permissions), checked 2026-10-17
+- [Intercept and control agent behavior with hooks](https://code.claude.com/docs/en/agent-sdk/hooks), checked 2026-10-17
+- [Get structured output from agents](https://code.claude.com/docs/en/agent-sdk/structured-outputs), checked 2026-10-17
+- [Track cost and usage](https://code.claude.com/docs/en/agent-sdk/cost-tracking), checked 2026-10-17
+- [Agent SDK reference - TypeScript](https://code.claude.com/docs/en/agent-sdk/typescript), checked 2026-10-17
+- [Effective context engineering for AI agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents), published 2025-09-29, checked 2026-10-17
+- [Building effective agents](https://www.anthropic.com/engineering/building-effective-agents), published 2024-12-19, checked 2026-10-17
+- Course code (repository files, not web sources): the lesson helpers in `course/m1-harness-lab/lesson_support/src/harness_lab_lessons/`

@@ -1,0 +1,40 @@
+exercise: m1-harness-lab
+module: m1
+title: Enforced harness lab
+package: harness_lab
+stages:
+  - id: "01-policy-engine"
+    title: Guard decides what a tool call may do
+    tests: tests/test_01_policy_engine.py
+    lesson: m1/01-harness-is-loop-plus-policy
+  - id: "02-hook-adapter"
+    title: Guard wired as a PreToolUse hook
+    tests: tests/test_02_hook_adapter.py
+    lesson: m1/02-hooks-permissions-and-modes
+  - id: "03-session-store"
+    title: Durable ticket sessions with safe resume
+    tests: tests/test_03_session_store.py
+    lesson: m1/04-durable-sessions-and-idempotency
+  - id: "04-idempotent-tools"
+    title: Side effects happen once
+    tests: tests/test_04_idempotent_tools.py
+    lesson: m1/04-durable-sessions-and-idempotency
+  - id: "05-caps-and-report"
+    title: Turn and budget caps with a run summary
+    tests: tests/test_05_caps_and_report.py
+    lesson: m1/06-failure-taxonomy-and-caps
+  - id: "06-subagent-verdict"
+    title: Reviewer subagent with a schema-bound verdict
+    tests: tests/test_06_subagent_verdict.py
+    lesson: m1/03-subagents
+  - id: "07-failure-taxonomy"
+    title: Classify harness failures from traces (judgment stage)
+    tests: tests/test_07_failure_taxonomy.py
+    lesson: m1/06-failure-taxonomy-and-caps
+  - id: "08-live-ticket"
+    title: "Live: one tinyshop ticket end to end"
+    tests: tests/test_08_live_ticket.py
+    lesson: m1/01-harness-is-loop-plus-policy
+    live: true
+    requires: [claude-auth]
+    timeout: 900

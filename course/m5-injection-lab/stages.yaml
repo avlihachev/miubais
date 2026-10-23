@@ -1,0 +1,47 @@
+exercise: m5-injection-lab
+module: m5
+title: Injection and the hardened harness
+package: injection_lab
+stages:
+  - id: "01-corpus-and-detector"
+    title: Load the injection corpus and score it with a heuristic detector
+    tests: tests/test_01_corpus_and_detector.py
+    lesson: m5/02-indirect-injection-and-provenance
+  - id: "02-provenance-and-taint"
+    title: Provenance tags and a taint state that denies side-effect tools
+    tests: tests/test_02_provenance_and_taint.py
+    lesson: m5/02-indirect-injection-and-provenance
+  - id: "03-secrets-and-env"
+    title: Scrub secrets from tool output and build a minimal subprocess environment
+    tests: tests/test_03_secrets_and_env.py
+    lesson: m5/03-permissions-sandboxing-and-secrets
+  - id: "04-remote-mcp"
+    title: A remote MCP server over Streamable HTTP with bearer auth and audience checks
+    tests: tests/test_04_remote_mcp.py
+    lesson: m5/04-remote-mcp-and-oauth
+  - id: "05-redteam-offline"
+    title: An offline red team against a fake target and a promptfoo config
+    tests: tests/test_05_redteam_offline.py
+    lesson: m5/05-red-teaming-with-promptfoo
+  - id: "06-audit-log"
+    title: An append-only audit log and a compliance checklist
+    tests: tests/test_06_audit_log.py
+    lesson: m5/06-eu-ai-act-for-engineers
+  - id: "07-threat-model"
+    title: Threat model for this harness (judgment stage)
+    tests: tests/test_07_threat_model.py
+    lesson: m5/01-threat-model-for-agent-factories
+  - id: "08-live-injection"
+    title: "Live: run the hardened harness on a planted ticket"
+    tests: tests/test_08_live_injection.py
+    lesson: m5/02-indirect-injection-and-provenance
+    live: true
+    requires: [claude-auth]
+    timeout: 1200
+  - id: "09-redteam-live"
+    title: "Live: a promptfoo red-team run against the fake target"
+    tests: tests/test_09_redteam_live.py
+    lesson: m5/05-red-teaming-with-promptfoo
+    live: true
+    requires: [node, api-key]
+    timeout: 1200

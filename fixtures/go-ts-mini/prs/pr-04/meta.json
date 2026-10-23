@@ -1,0 +1,10 @@
+{
+  "title": "Find overdue jobs",
+  "author": "dara",
+  "created_at": "2026-10-14",
+  "approvals": [
+    "aino",
+    "emil"
+  ],
+  "description": "Adds Service.Overdue for in-progress jobs past their due date, with a test, and an index on due_at for the matching query."
+}

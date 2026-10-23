@@ -1,0 +1,4 @@
+apiVersion: v2
+name: k8s-aibom
+version: 1.5.1
+description: Placeholder for the optional k8s-aibom dependency, not vendored (see VENDORED.md)

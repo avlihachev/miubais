@@ -1,0 +1,10 @@
+runbook#000 [0:54] 'Runbook'
+   54 chars  # Runbook\n\nRestart the worker when the queue backs up.
+runbook#001 [56:89] 'Runbook > Deploy'
+   33 chars  ## Deploy\n\nTag the release first.
+runbook#002 [91:184] 'Runbook > Deploy'
+   93 chars  ~~~bash\n./deploy.sh --env prod\n\n# rollback if the error
+runbook#003 [186:235] 'Runbook > Deploy'
+   49 chars  Watch the error rate.\n\nPage the on-call engineer.
+runbook#004 [209:261] 'Runbook > Deploy'
+   52 chars  Page the on-call engineer.\n\nWrite the incident note.

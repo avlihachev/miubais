@@ -1,0 +1,6 @@
+rank  8:   704,512 trainable of 243,269,632 per layer (0.29%)
+rank 16: 1,409,024 trainable of 243,269,632 per layer (0.58%)
+rank 64: 5,636,096 trainable of 243,269,632 per layer (2.32%)
+effective batch 8; max_steps = 60 sees 480 examples
+1,000 examples, 1 epoch(s): 125 steps
+1,000 examples, 3 epoch(s): 375 steps

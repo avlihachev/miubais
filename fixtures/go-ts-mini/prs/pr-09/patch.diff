@@ -1,0 +1,61 @@
+diff --git a/CHANGELOG.json b/CHANGELOG.json
+index 4768851..5e48895 100644
+--- a/CHANGELOG.json
++++ b/CHANGELOG.json
+@@ -1,4 +1,11 @@
+ [
++  {
++    "version": "0.5.0",
++    "date": "2026-10-15",
++    "entries": [
++      "Cancelling an already cancelled job returns it instead of 409"
++    ]
++  },
+   {
+     "version": "0.4.0",
+     "date": "2026-10-10",
+diff --git a/internal/api/handlers.go b/internal/api/handlers.go
+index e4857eb..ab79301 100644
+--- a/internal/api/handlers.go
++++ b/internal/api/handlers.go
+@@ -114,10 +114,10 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
+ }
+ 
+ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
+-	job, err := h.svc.Cancel(r.PathValue("id"))
++	id := r.PathValue("id")
++	job, err := h.svc.Cancel(id)
+ 	if err != nil {
+-		writeServiceError(w, err)
+-		return
++		job, _ = h.svc.Get(id)
+ 	}
+ 	writeJSON(w, http.StatusOK, job)
+ }
+diff --git a/internal/api/handlers_test.go b/internal/api/handlers_test.go
+index d76c2fd..e47fe0b 100644
+--- a/internal/api/handlers_test.go
++++ b/internal/api/handlers_test.go
+@@ -82,15 +82,19 @@ func TestCancelUnknownJobReturns404(t *testing.T) {
+ 	}
+ }
+ 
+-func TestCancelTwiceReturns409(t *testing.T) {
++func TestCancelTwiceReturnsCancelledJob(t *testing.T) {
+ 	srv := newServer()
+ 	do(t, srv, http.MethodPost, "/jobs", validBody)
+ 	if rec := do(t, srv, http.MethodPost, "/jobs/job-0001/cancel", ""); rec.Code != http.StatusOK {
+ 		t.Fatalf("first cancel: want 200, got %d", rec.Code)
+ 	}
+ 	rec := do(t, srv, http.MethodPost, "/jobs/job-0001/cancel", "")
+-	if rec.Code != http.StatusConflict || errorCode(t, rec) != "invalid_status" {
+-		t.Fatalf("second cancel: want 409 invalid_status, got %d", rec.Code)
++	var got jobs.Job
++	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
++		t.Fatal(err)
++	}
++	if rec.Code != http.StatusOK || got.Status != jobs.StatusCancelled {
++		t.Fatalf("second cancel: want 200 cancelled, got %d %+v", rec.Code, got)
+ 	}
+ }
+ 

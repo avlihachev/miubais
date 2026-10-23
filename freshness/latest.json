@@ -1,0 +1,35 @@
+{
+  "generated_at": "2026-10-16T21:40:29+00:00",
+  "lessons": [
+    {
+      "slug": "m1/00-placeholder",
+      "path": "site/src/content/docs/m1/00-placeholder.md",
+      "title": "Placeholder lesson",
+      "verified_on": "2026-10-16",
+      "executed": "local",
+      "drifts": {
+        "pypi:claude-agent-sdk": {
+          "pinned": "0.2.168",
+          "latest": "0.2.168",
+          "level": "none"
+        },
+        "model:default": {
+          "pinned": "claude-opus-5-5",
+          "latest": "claude-opus-5-5",
+          "level": "none"
+        }
+      },
+      "links": [
+        {
+          "url": "https://code.claude.com/docs/en/agent-sdk/python",
+          "status": 200,
+          "final_url": "https://code.claude.com/docs/en/agent-sdk/python",
+          "ok": true,
+          "redirected": false,
+          "error": null
+        }
+      ],
+      "badge": "green"
+    }
+  ]
+}

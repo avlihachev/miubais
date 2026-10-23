@@ -1,0 +1,24 @@
+# Threat-model key for stage 07. controls_by_asi lists, per ASI entry, the controls in this harness
+# that count as an answer; "not applicable" is listed where the harness has no such surface.
+# On the honour system: read it only to check your own THREAT_MODEL.md.
+controls_by_asi:
+  ASI01:
+    [detect.score, provenance.wrap, provenance.post_hook, provenance.taint_policy]
+  ASI02:
+    [harnesskit.policy.Policy, provenance.taint_policy, mcpserver, read-only tools, max_turns, max_budget_usd]
+  ASI03:
+    [mcpserver, secrets.subprocess_env, secrets.guard_env, secrets.scrub, harnesskit.policy.Policy]
+  ASI04:
+    [mcpserver, harnesskit.policy.Policy, secrets.subprocess_env, not applicable]
+  ASI05:
+    [harnesskit.policy.Policy, provenance.taint_policy, secrets.subprocess_env]
+  ASI06:
+    [provenance.wrap, provenance.post_hook, provenance.taint_policy, detect.score]
+  ASI07:
+    [not applicable, mcpserver, provenance.wrap]
+  ASI08:
+    [max_turns, max_budget_usd, provenance.taint_policy, harnesskit.policy.Policy, audit.AuditLog]
+  ASI09:
+    [provenance.taint_policy, audit.AuditLog, detect.score]
+  ASI10:
+    [audit.AuditLog, harnesskit.policy.Policy, max_turns, max_budget_usd, provenance.taint_policy, not applicable]

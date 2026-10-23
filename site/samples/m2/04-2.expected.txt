@@ -1,0 +1,10 @@
+run a: result=success final message='Fixed; all tests pass.'
+  edits at [3, 6], test runs at [4, 7]
+  ok   tests ran after the last edit
+  ok   no test file edited
+  ok   no call repeated more than 2 times
+run b: result=success final message='Fixed; all tests pass.'
+  edits at [2, 5, 6], test runs at [3]
+  FAIL tests ran after the last edit
+  FAIL no test file edited
+  ok   no call repeated more than 2 times

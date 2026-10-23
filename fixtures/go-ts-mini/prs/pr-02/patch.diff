@@ -1,0 +1,107 @@
+diff --git a/CHANGELOG.json b/CHANGELOG.json
+index 4768851..bb30764 100644
+--- a/CHANGELOG.json
++++ b/CHANGELOG.json
+@@ -1,4 +1,11 @@
+ [
++  {
++    "version": "0.5.0",
++    "date": "2026-10-14",
++    "entries": [
++      "Add an optional priority (standard or rush) to jobs"
++    ]
++  },
+   {
+     "version": "0.4.0",
+     "date": "2026-10-10",
+diff --git a/internal/api/handlers.go b/internal/api/handlers.go
+index e4857eb..5d00930 100644
+--- a/internal/api/handlers.go
++++ b/internal/api/handlers.go
+@@ -37,6 +37,7 @@ type createRequest struct {
+ 	TargetLang    string  `json:"target_lang"`
+ 	HoursEstimate float64 `json:"hours_estimate"`
+ 	Translator    string  `json:"translator"`
++	Priority      string  `json:"priority"`
+ }
+ 
+ type listResponse struct {
+@@ -55,6 +56,8 @@ func (r createRequest) validate() error {
+ 		return errors.New("hours_estimate must be between 0 and 1000")
+ 	case len(r.Translator) > maxTranslatorChars:
+ 		return errors.New("translator is too long")
++	case r.Priority != "" && r.Priority != "standard" && r.Priority != "rush":
++		return errors.New("priority must be standard or rush")
+ 	}
+ 	return nil
+ }
+@@ -81,6 +84,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
+ 		TargetLang:    req.TargetLang,
+ 		HoursEstimate: req.HoursEstimate,
+ 		Translator:    req.Translator,
++		Priority:      req.Priority,
+ 	})
+ 	if err != nil {
+ 		writeServiceError(w, err)
+diff --git a/internal/api/handlers_test.go b/internal/api/handlers_test.go
+index d76c2fd..51bd579 100644
+--- a/internal/api/handlers_test.go
++++ b/internal/api/handlers_test.go
+@@ -54,6 +54,7 @@ func TestCreateRejectsInvalidInput(t *testing.T) {
+ 		"missing reference": `{"source_lang":"en","target_lang":"de","hours_estimate":1}`,
+ 		"same languages":    `{"reference":"R","source_lang":"en","target_lang":"en","hours_estimate":1}`,
+ 		"zero hours":        `{"reference":"R","source_lang":"en","target_lang":"de","hours_estimate":0}`,
++		"bad priority":      `{"reference":"R","source_lang":"en","target_lang":"de","hours_estimate":1,"priority":"now"}`,
+ 		"unknown field":     `{"reference":"R","source_lang":"en","target_lang":"de","hours_estimate":1,"x":1}`,
+ 	}
+ 	for name, body := range cases {
+diff --git a/internal/jobs/model.go b/internal/jobs/model.go
+index 0d13a6e..c1b4e7c 100644
+--- a/internal/jobs/model.go
++++ b/internal/jobs/model.go
+@@ -26,6 +26,7 @@ type Job struct {
+ 	TargetLang    string     `json:"target_lang"`
+ 	HoursEstimate float64    `json:"hours_estimate"`
+ 	Translator    string     `json:"translator,omitempty"`
++	Priority      string     `json:"priority,omitempty"`
+ 	Status        Status     `json:"status"`
+ 	DueAt         *time.Time `json:"due_at,omitempty"`
+ 	CreatedAt     time.Time  `json:"created_at"`
+@@ -37,6 +38,7 @@ type NewJob struct {
+ 	TargetLang    string
+ 	HoursEstimate float64
+ 	Translator    string
++	Priority      string
+ }
+ 
+ func ParseStatus(value string) (Status, bool) {
+diff --git a/internal/jobs/service.go b/internal/jobs/service.go
+index bba8bb0..87d4376 100644
+--- a/internal/jobs/service.go
++++ b/internal/jobs/service.go
+@@ -30,6 +30,7 @@ func (s *Service) Create(in NewJob) (Job, error) {
+ 		TargetLang:    in.TargetLang,
+ 		HoursEstimate: in.HoursEstimate,
+ 		Translator:    in.Translator,
++		Priority:      in.Priority,
+ 		Status:        StatusPending,
+ 		CreatedAt:     s.now().UTC(),
+ 	}
+diff --git a/proto/jobs/v1/jobs.proto b/proto/jobs/v1/jobs.proto
+index 30f1617..50d2d93 100644
+--- a/proto/jobs/v1/jobs.proto
++++ b/proto/jobs/v1/jobs.proto
+@@ -5,12 +5,12 @@ package jobs.v1;
+ import "google/protobuf/timestamp.proto";
+ 
+ message Job {
+-  reserved 4;
+   reserved "customer_email";
+ 
+   string id = 1;
+   string reference = 2;
+   string source_lang = 3;
++  string priority = 4;
+   string target_lang = 5;
+   double hours_estimate = 6;
+   string translator = 7;

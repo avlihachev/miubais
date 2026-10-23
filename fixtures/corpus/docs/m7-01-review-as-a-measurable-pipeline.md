@@ -1,0 +1,164 @@
+# Review as a measurable pipeline
+
+**Prerequisites:** [M2 lesson 06](../../m2/06-evals-for-code-agents/), which defines precision and recall for review findings, verify gates and the lagging metrics; this lesson applies them to one concrete pipeline.
+
+## Why this matters for the factory
+
+If you already run a Claude Code review harness at work, with `.claude/rules` and a verify step, you have probably been asked the question that ends most such projects: does it work? "The comments look useful" is not an answer a team lead can act on, and it gives you nothing to tune. Change the prompt, add a rule, swap the model, and you cannot tell whether the reviewer got better or just got different.
+
+In a factory that merges agent-written pull requests, the reviewer is no longer a helper sitting next to a human. It is a gate in front of one. Its two failure modes have different prices. A missed blocker reaches production with a human who was told the PR had been checked. A false alarm costs someone the minutes to dismiss it, and a reviewer that cries wolf often enough gets ignored, at which point it costs money and catches nothing. The capstone turns your review harness into a pipeline whose output is data, measured against labels, so both prices show up as numbers.
+
+## Core idea
+
+Treat review as a pipeline in which every stage either produces records or makes a decision from records:
+
+```
+rules for the changed files ──► read-only reviewer ──► findings (JSON, schema-checked)
+patch applied to a copy ──► go test / node --test ──► verify result
+                                                     │
+findings ─► hygiene (touched files, confidence, dedupe) ─► verdict + blockers ─► report
+                                                     │
+                     labelled PRs ─► matching rule ─► precision, recall, blocker recall
+```
+
+A finding is a record with a file, a line, a severity, a category from a closed list, a message and a confidence. A label is the same idea from the other side: a known issue with a file, a line range, a category and a severity. Once both are data, "is the reviewer good" becomes "what share of its findings match a label (precision), what share of the labels did it find (recall), and in particular what share of the blocker labels did it find (blocker recall)".
+
+Two things keep that measure honest. The first is a matching rule written down before you look at results, because precision depends on it more than on the reviewer. The second is a source of truth the reviewer cannot argue with: the verify gate, which applies the patch and runs the tests. The reviewer's opinion about the tests is never evidence; the exit code is.
+
+## Mechanics
+
+### Findings as data
+
+The capstone's reviewer answers with JSON that must fit a fixed schema: `file`, `line` (an integer of at least 1), `severity` (`blocker`, `major` or `minor`), `category` (one of twelve, such as `proto-field-reuse`, `migration-number-collision`, `secret-in-code` or `style`), `message`, `confidence` between 0 and 1 and an optional `rule`. Lesson 03 covers how the Agent SDK enforces the schema. What matters here is the consequence: a category outside the list cannot enter the pipeline, so every finding can be counted, grouped and compared. "Consider adding more tests" is not a finding until it names a file, a line and a category.
+
+The categories are the repository's vocabulary, not a generic bug taxonomy. Twelve categories for a Go service with a TypeScript client, a proto contract and numbered SQL migrations is small enough to label consistently and specific enough that a finding's category tells a human what to look at.
+
+### Labels and the matching rule
+
+The capstone's labels (`tests/LABELS.yaml`) list the planted issues of twelve PRs: twelve labelled findings in all, five of them blockers, five major and two minor, plus the blockers each PR should get and the decision a careful reviewer would reach. Stage 06 matches findings to labels with one rule:
+
+- a finding matches a label when the file is equal, the category is equal and the line lies within the label's range widened by three lines on each side;
+- findings are taken most confident first, and each takes the first free label it matches, so one label takes at most one finding and one finding at most one label;
+- severity plays no part in the match. Per-severity precision counts findings of that severity, per-severity recall counts labels of that severity.
+
+Each clause exists because something goes wrong without it. Without the line window, a model that cites the line of the function signature instead of the line of the bug scores zero. Without the category, a `style` remark on the same lines as a leaked token would get credit for finding the token. Without one-to-one matching, a reviewer that reports the same issue three times gets three true positives. M2 lesson 06 makes the general case; the sample shows it on an invented set of three labels and five findings, scored with the capstone's rule and with a rule that only compares file names.
+
+Sample: `site/samples/m7/01-1.py`.
+
+```python
+from capstone.types import Finding, Label
+from capstone_lessons import pair_up, same_file, same_issue, score
+
+labels = [
+    Label(file="billing/charge.go", start=40, end=44, category="error-swallowed", severity="major"),
+    Label(file="billing/keys.go", start=7, end=7, category="secret-in-code", severity="blocker"),
+    Label(file="ui/cart.ts", start=12, end=12, category="ts-any", severity="minor"),
+]
+
+
+def finding(file, line, category, severity, confidence):
+    return Finding(
+        file=file,
+        line=line,
+        severity=severity,
+        category=category,
+        message=f"{category} near line {line}",
+        confidence=confidence,
+    )
+
+
+findings = [
+    finding("billing/charge.go", 46, "error-swallowed", "major", 0.9),
+    finding("billing/charge.go", 41, "error-swallowed", "major", 0.6),
+    finding("billing/charge.go", 90, "style", "minor", 0.7),
+    finding("billing/keys.go", 7, "secret-in-code", "blocker", 0.95),
+    finding("ui/cart.ts", 30, "ts-any", "minor", 0.8),
+]
+
+for name, rule in (("file, line window, category", same_issue), ("file only", same_file)):
+    pairs = pair_up(findings, labels, rule)
+    overall = score(findings, labels, pairs)
+    blocker = score(findings, labels, pairs, "blocker")
+    print(f"rule: {name}")
+    for i, j in pairs:
+        f, label = findings[i], labels[j]
+        print(f"  {f.file}:{f.line} {f.category} -> label {label.start}-{label.end}")
+    print(
+        f"  precision {overall.precision:.2f} ({len(pairs)}/{overall.findings})"
+        f"  recall {overall.recall:.2f} ({len(pairs)}/{overall.labels})"
+        f"  blocker recall {blocker.recall:.2f}"
+    )
+```
+
+Output, run on 2026-10-17:
+
+```
+rule: file, line window, category
+  billing/charge.go:46 error-swallowed -> label 40-44
+  billing/keys.go:7 secret-in-code -> label 7-7
+  precision 0.40 (2/5)  recall 0.67 (2/3)  blocker recall 1.00
+rule: file only
+  billing/charge.go:46 error-swallowed -> label 40-44
+  billing/keys.go:7 secret-in-code -> label 7-7
+  ui/cart.ts:30 ts-any -> label 12-12
+  precision 0.60 (3/5)  recall 1.00 (3/3)  blocker recall 1.00
+```
+
+Under the capstone's rule two findings match. The duplicate at line 41 is inside the window too, but the label was already taken by the more confident finding at line 46, so the duplicate counts against precision: that is why stage 03 deduplicates before anything is scored. The `ts-any` finding at line 30 is eighteen lines from its label and does not match. Compare the file-only rule: it pairs that distant finding with the label and reports perfect recall, and precision rises from 0.40 to 0.60, for a reviewer that did nothing better. A loose matching rule is the cheapest way to make a reviewer look good, and the second eval case of this module is a learner who wrote exactly that rule.
+
+### Blocker recall first, and why cleaning matters
+
+The three numbers do not weigh the same. Blocker recall decides whether the gate is safe: a reviewer that misses a leaked credential has failed no matter how precise its other remarks were. Overall precision decides whether people will keep reading it. The capstone encodes that as thresholds. The recorded reviewer used in the offline stages (`tests/FAKEREVIEW.yaml`) has to reach overall precision of at least 0.6 and blocker recall of at least 0.9 to count as trusted; the live run in stage 08 has looser floors, blocker recall 0.75 and precision 0.4, because a model run varies from one attempt to the next and twelve PRs are a small sample.
+
+The recorded reviewer is wrong in the ways real reviewers are wrong: it reports issues in files the patch never touched, repeats itself, and adds low-confidence guesses. Raw, it posts 26 findings, recall is 1.0, and precision is 12/26, about 0.46, so it is not trusted. After stage 03 drops findings on untouched files, findings below 0.6 confidence and duplicates, 16 findings remain: precision 11/16 (0.6875), recall 11/12 (0.917), blocker recall still 1.0. Nothing about the model changed. The hygiene stage alone moved it over the bar, at the price of one true finding. That trade is the shape of most of the work: recall is cheap to buy with more findings, and precision is what you pay for it.
+
+### Why the verify gate outranks the reviewer
+
+A reviewer that reads a diff cannot know whether the tests pass, and Anthropic's own managed reviewer says as much: "a review works from reading the diff and the surrounding code, without building or running your code" (Code Review). Its pipeline has a verification step, "A verification step checks findings against the code before they're reported" (Code Review), but that step checks findings, not the build. So the capstone runs the build itself. Stage 04 applies the patch to a copy of the repository and runs `go test ./...` and `node --test`; a patch that does not apply is a `conflict` and is never tested on the unpatched tree.
+
+The gate's result is then the one fact in the report that the reviewer cannot override. When a reviewer's summary says the tests pass and the gate says they failed, stage 03's `reconcile` attaches a note that the gate wins, and the report prints it next to the summary. This is Claude Code's general advice applied to review: "Give Claude a check it can run: tests, a build, a screenshot to compare" and "Have Claude show evidence rather than asserting success" (Best practices for Claude Code). For the metrics it means the reviewer is only graded on judgement. It gets no credit for a failing test that the test runner found.
+
+### What the 2026 benchmarks say, read with care
+
+Public numbers help calibrate expectations, as long as you read who ran them and how they define a match.
+
+- **GitHub ReviewBench** (GitHub, 2026-10-05) is the most careful of the year. It "contains 219 pull requests from 187 public open source licensed repositories" across 19 languages, and its headline numbers are grounded: "Grounded precision, recall, and F1 score use only the existing gold-set labels". Every agent is scored by the same model judge ("We use Claude Sonnet 5 as the LLM grader"), and the post reports that senior engineers' judgements "agreed with ReviewBench 96.6% of the time". Help Net Security's report adds GitHub's own experiment: a lite tier of Copilot review whose recall "rose by 13.6%" while "cost per review fell by 8%". GitHub runs a code reviewer too, so read the experiment as GitHub's; the benchmark's openness is what makes it worth citing.
+- **Augment Code** (2025-12-11, updated 2026-06-18) ran seven tools over "50 pull requests across five multi-million line open-source codebases" after it "expanded and corrected the golden comments by reviewing each PR manually". Its table spans precision from 20 % to 68 % and recall from 29 % to 55 %; Claude Code scores 23 % precision at 51 % recall. The vendor built the labels and ranks itself first, so the spread is more informative than the ranking.
+- **Kodus** (2026-08-18) reports the trade directly: on "136 labeled bugs from five real repositories", "The baseline found 72 bugs and produced 170 false positives" while "The high-recall configuration found 84 bugs and produced 328 false positives". Their verdict: "Its recall gain was real, and so was its false-positive problem." They shipped the heavy mode as opt-in.
+- **Martian's Code Review Bench**, reported on CodeAnt's blog (a vendor page with inconsistent dates), counts a comment as a true positive online when the developer changes the code after it, and built its offline gold set partly from Augment's and Greptile's datasets, which may bias it towards those tools' categories.
+
+Three lessons carry over. Every benchmark defines a match differently, from a fixed gold set to a model judge to "the developer changed something", so numbers do not compare across benchmarks. Precision in the 20 % to 70 % range is normal for tools in production, which tells you what to expect from your own first run. And none of these sets is your repository: the categories that kill your service (here, proto field numbers and migration numbers) are rare in public PRs. You need your own labelled set, however small.
+
+## Pitfalls seen in the wild
+
+- **Grading on how the comments read.** Fluent, plausible findings are the default output of a model. Without labels you are grading style.
+- **A matching rule decided after the run.** It drifts towards whatever makes this week's number look right. Write it first, test it, keep it fixed.
+- **Counting duplicates.** One issue reported three times is one true positive and two false ones, or three true ones if your rule is loose. Deduplicate before scoring and match one to one.
+- **One F1 for everything.** Two missed blockers and ten correct nits average out to a respectable number. Gate on blocker recall.
+- **Letting the reviewer report on the build.** A summary that says the tests pass is a claim; the gate's exit code is the fact. Print both and let the gate win.
+- **Importing a benchmark's ranking.** A vendor's table measures the vendor's labels on public code. Your reviewer's precision on your repository is a number you have to produce.
+
+## What interviewers ask
+
+**How would you show that an AI code reviewer is worth running?**
+Turn its output into records with file, line, severity and category, label a set of PRs with known issues including clean ones, and score findings with a written matching rule: same file, same category, a line window, one to one. Report precision and recall per severity, gate on blocker recall, and keep the verify gate as a separate, deterministic input.
+
+**Your reviewer's precision jumped after a change. What do you check first?**
+Whether the matching rule or the hygiene changed rather than the reviewer. A looser rule, such as matching on file alone, raises both precision and recall without any better review. Then check the duplicates and the finding count: precision also rises when the reviewer simply says less.
+
+**Why not let the reviewer decide whether the tests pass?**
+Because it reads the diff and does not run anything, so its statement about the tests is a guess. Run the tests on the patched copy, report the result next to the summary, and let the gate override it. That also keeps the metrics about judgement, not about what the test runner found.
+
+**What do the public code-review benchmarks tell you about your own reviewer?**
+The range to expect, roughly 20 % to 70 % precision across tools, and that higher recall usually costs noise, as Kodus measured. They do not transfer: each defines a match differently, the most-cited ones are run by vendors, and their PRs do not contain your repository's failure modes. Build a small labelled set of your own.
+
+## Sources
+
+- [ReviewBench: An open benchmark for AI code review](https://github.blog/ai-and-ml/reviewbench-an-open-benchmark-for-ai-code-review/), GitHub Blog, published 2026-10-05, checked 2026-10-17
+- [GitHub's ReviewBench puts AI code reviewers to the test](https://www.helpnetsecurity.com/2026/10/06/github-reviewbench-ai-code-review-benchmark/), Help Net Security, published 2026-10-06, checked 2026-10-17
+- [We benchmarked 7 AI code review tools on real-world PRs](https://www.augmentcode.com/blog/we-benchmarked-7-ai-code-review-tools-on-real-world-prs-here-are-the-results), Augment Code (vendor), published 2025-12-11, updated 2026-06-18, checked 2026-10-17
+- [AI code review recall](https://kodus.io/en/ai-code-review-recall/), Kodus (vendor), published 2026-08-18, checked 2026-10-17
+- [AI code review benchmark results from 200,000 real pull requests](https://codeant.ai/blogs/ai-code-review-benchmark-results-from-200-000-real-pull-requests), CodeAnt (vendor) on Martian's Code Review Bench, dates on the page inconsistent, checked 2026-10-17
+- [Code Review](https://code.claude.com/docs/en/code-review), Claude Code docs, checked 2026-10-17
+- [Best practices for Claude Code](https://code.claude.com/docs/en/best-practices), Claude Code docs, checked 2026-10-17
+- Course code and records (repository files, not web sources): stages 03, 04 and 06 in `course/m7-capstone/README.md`; the lesson helpers in `course/m7-capstone/lesson_support/src/capstone_lessons/`

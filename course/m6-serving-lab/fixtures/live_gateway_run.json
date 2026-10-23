@@ -1,0 +1,86 @@
+{
+  "date": "2026-10-22",
+  "stage": "08-live-gateway",
+  "local_model": "qwen3.5:0.8b",
+  "api_model": "claude-opus-5-5",
+  "local_context": 1024,
+  "max_tokens": 128,
+  "budget_usd": 0.2,
+  "prompts": [
+    {
+      "id": "local-1",
+      "require": "local",
+      "expected": "ollama",
+      "route": "ollama",
+      "ok": true,
+      "latency_ms": 548.1,
+      "cost_usd": 0.0,
+      "tokens_out": 31
+    },
+    {
+      "id": "local-2",
+      "require": "local",
+      "expected": "ollama",
+      "route": "ollama",
+      "ok": true,
+      "latency_ms": 644.6,
+      "cost_usd": 0.0,
+      "tokens_out": 31
+    },
+    {
+      "id": "api-1",
+      "require": "api",
+      "expected": "claude",
+      "route": "claude",
+      "ok": true,
+      "latency_ms": 3789.6,
+      "cost_usd": 0.012576,
+      "tokens_out": 68
+    },
+    {
+      "id": "api-2",
+      "require": "api",
+      "expected": "claude",
+      "route": "claude",
+      "ok": true,
+      "latency_ms": 3505.3,
+      "cost_usd": 0.012696,
+      "tokens_out": 74
+    },
+    {
+      "id": "any-1",
+      "require": "any",
+      "expected": "ollama",
+      "route": "ollama",
+      "ok": true,
+      "latency_ms": 748.3,
+      "cost_usd": 0.0,
+      "tokens_out": 44
+    },
+    {
+      "id": "any-2",
+      "require": "any",
+      "expected": "claude",
+      "route": "claude",
+      "ok": true,
+      "latency_ms": 4011.2,
+      "cost_usd": 0.031506,
+      "tokens_out": 144
+    }
+  ],
+  "routes": {
+    "ollama": {
+      "requests": 3,
+      "failures": 0,
+      "p50_latency_ms": 640.6,
+      "cost_usd": 0.0
+    },
+    "claude": {
+      "requests": 3,
+      "failures": 0,
+      "p50_latency_ms": 3789.6,
+      "cost_usd": 0.056779
+    }
+  },
+  "total_cost_usd": 0.056779
+}

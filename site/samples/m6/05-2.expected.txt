@@ -1,0 +1,4 @@
+p50: nearest rank  315.0   numpy linear  317.5
+p90: nearest rank  340.0   numpy linear  596.0
+p99: nearest rank 2900.0   numpy linear 2669.6
+ranks used for n = 8: {50: 4, 90: 8, 99: 8}

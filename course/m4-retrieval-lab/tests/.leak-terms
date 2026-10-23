@@ -1,0 +1,86 @@
+
+
+Question: 
+
+
+Sources:
+
+
+ AND NOT tsv @@ %(neg)s::tsquery
+ ORDER BY score DESC, chunk_id LIMIT %(n)s
+((?:\[\d+\]\s*)*)(.*)
+(?<=[.!?])\s+|\n+
+) NOT NULL)
+), not vector(
+ABBREVIATIONS
+Answer the question using only the numbered sources below.
+CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw ON chunks USING hnsw (embedding vector_cosine_ops)
+CREATE INDEX IF NOT EXISTS chunks_tsv_gin ON chunks USING gin (tsv)
+CREATE TABLE IF NOT EXISTS chunks ( chunk_id text PRIMARY KEY, doc_id text NOT NULL, heading_path text NOT NULL, start_char int NOT NULL, end_char int NOT NULL, text text NOT NULL, tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED, embedding vector(
+Cite the source of every sentence of your answer as [n], the number of the source.
+EF_SEARCH_DEFAULT
+FENCE_CHARS
+HEADING
+INSERT INTO chunks (chunk_id, doc_id, heading_path, start_char, end_char, text, embedding) VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (chunk_id) DO UPDATE SET doc_id = EXCLUDED.doc_id, heading_path = EXCLUDED.heading_path, start_char = EXCLUDED.start_char, end_char = EXCLUDED.end_char, text = EXCLUDED.text, embedding = EXCLUDED.embedding
+INSTRUCTIONS
+If none of the sources supports an answer, reply exactly:
+LEADING_MARKERS
+MARKER
+SELECT a.atttypmod FROM pg_attribute a WHERE a.attrelid = to_regclass('chunks') AND a.attname = 'embedding'
+SELECT chunk_id, 1 - (embedding <=> %s) AS score FROM chunks ORDER BY embedding <=> %s LIMIT %s
+SELECT chunk_id, ts_rank_cd(tsv, %(pos)s::tsquery, 32) AS score FROM chunks WHERE tsv @@ %(pos)s::tsquery
+SELECT doc_id, chunk_id, start_char, end_char, heading_path, text FROM chunks
+SELECT doc_id, chunk_id, start_char, end_char, heading_path, text, embedding::real[] FROM chunks WHERE chunk_id = ANY(%s)
+SELECT set_config('hnsw.ef_search', %s, true)
+SELECT websearch_to_tsquery('english', %s)::text
+SENTENCE_END
+UPSERT
+\[(\d+)\]
+^(#{1,6})\s+(.+?)\s*#*\s*$
+_ask
+_document
+_fence
+_load
+_mean
+_norm
+_one
+_pack
+_ranked
+_relevance
+_scores
+_unit
+all_chunks
+atoms
+chars
+chosen
+chunks.embedding is vector(
+current
+depth
+existing
+fence_start
+first_relevant
+header
+last_fence_end
+lead
+length
+lengths
+load_golden
+marks
+overall
+para
+parsed
+parser
+penalty
+redundancy
+remaining
+retrieval_lab_metrics
+retrieve
+retriever
+scored
+split_tsquery
+stack
+store_true
+stripped
+table_dims
+trigrams
+vecs

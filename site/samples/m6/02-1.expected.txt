@@ -1,0 +1,5 @@
+weights KV    weights GB  KV GB  KiB/token   KV tokens  sequences at 256K / 32K / 8K
+bf16    bf16        54.0   14.6         64     222,778  0 / 6 / 27
+fp8     bf16        27.0   41.6         64     634,765  2 / 19 / 77
+fp8     fp8         27.0   41.6         32   1,269,531  4 / 38 / 154
+int4    fp8         13.5   55.1         32   1,681,518  6 / 51 / 205

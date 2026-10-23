@@ -1,0 +1,14 @@
+messages: {'AssistantMessage': 7, 'ResultMessage': 1, 'UserMessage': 6, 'dict': 1}
+invoke_agent ticket-runner              0 ms  36807 ms
+  chat claude-opus-5-5                  0 ms  11730 ms
+  execute_tool Grep                 11730 ms    866 ms
+  execute_tool Read                 11730 ms     57 ms
+  execute_tool Read                 11730 ms    495 ms
+  chat claude-opus-5-5              12596 ms   5303 ms
+  execute_tool Edit                 17899 ms    233 ms
+  chat claude-opus-5-5              18132 ms   5944 ms
+  execute_tool Bash                 24076 ms    866 ms
+  chat claude-opus-5-5              24942 ms   3282 ms
+  execute_tool Bash                 28224 ms    323 ms
+  chat claude-opus-5-5              28547 ms   8181 ms
+spans: 12 chat: 5

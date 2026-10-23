@@ -1,0 +1,8 @@
+ticket                 stopped_by turns    cost denials files  tests
+--------------------------------------------------------------------
+001-discount-rounding  success        8   $0.21       0     1  pass
+002-negative-quantity  max_turns     12   $0.48       3     2  fail
+003-out-of-stock-msg   budget        10   $0.79       0     0  not run
+stopped_by: {'success': 1, 'max_turns': 1, 'budget': 1}
+spend $1.48, shipped 1, cost per shipped ticket $1.48
+over the cap: ['003-out-of-stock-msg']

@@ -1,0 +1,13 @@
+fix-rounding     PPPPP  5/5
+add-endpoint     PPPPP  5/5
+rename-flag      PP.PP  4/5
+null-guard       P.PPP  4/5
+retry-on-429     .PP.P  3/5
+migrate-config   P..P.  2/5
+flaky-cache      ..P..  1/5
+cross-repo-bump  .....  0/5
+
+ k  pass@k  pass^k
+ 1  0.6000  0.6000
+ 3  0.8125  0.3625
+ 5  0.8750  0.2500

@@ -1,0 +1,56 @@
+diff --git a/CHANGELOG.json b/CHANGELOG.json
+index 4768851..737b981 100644
+--- a/CHANGELOG.json
++++ b/CHANGELOG.json
+@@ -1,4 +1,11 @@
+ [
++  {
++    "version": "0.5.0",
++    "date": "2026-10-16",
++    "entries": [
++      "formatHours accepts estimated hours as strings from the CSV import"
++    ]
++  },
+   {
+     "version": "0.4.0",
+     "date": "2026-10-10",
+diff --git a/web/src/format.test.ts b/web/src/format.test.ts
+index eb6c97f..6495e2c 100644
+--- a/web/src/format.test.ts
++++ b/web/src/format.test.ts
+@@ -13,14 +13,14 @@ const sample: Job = {
+   created_at: "2026-10-01T09:30:00Z",
+ };
+ 
+-test("formatHours shows minutes under one hour", () => {
+-  assert.equal(formatHours(0.25), "15 min");
+-});
+-
+ test("formatHours shows one decimal in hours", () => {
+   assert.equal(formatHours(12.54), "12.5 h");
+ });
+ 
++test("formatHours accepts estimated hours from the CSV import", () => {
++  assert.equal(formatHours("12.54"), "12.5 h");
++});
++
+ test("formatLanguages joins source and target language", () => {
+   assert.equal(formatLanguages("en", "de"), "en -> de");
+ });
+diff --git a/web/src/format.ts b/web/src/format.ts
+index 842bbaf..1476b15 100644
+--- a/web/src/format.ts
++++ b/web/src/format.ts
+@@ -1,10 +1,8 @@
+ import type { Job } from "./api.ts";
+ import { statusLabel } from "./status.ts";
+ 
+-export function formatHours(hours: number): string {
+-  if (hours < 1) {
+-    return `${Math.round(hours * 60)} min`;
+-  }
++export function formatHours(value: any): string {
++  const hours = typeof value === "string" ? Number.parseFloat(value) : value;
+   return `${hours.toFixed(1)} h`;
+ }
+ 

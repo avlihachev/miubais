@@ -1,0 +1,354 @@
+---
+import { loadCourse, type CourseModule } from "../../lib/course";
+
+const { modules } = await loadCourse();
+const byId = Object.fromEntries(modules.map((m) => [m.id, m])) as Record<string, CourseModule>;
+const initial = modules[0].id;
+const MARK = 11;
+
+const marks = (id: string, x: number, y: number) =>
+  byId[id].stages.map((s, i) => ({ x: x + i * MARK, y, exercise: byId[id].exercise, stage: s.id, title: s.title }));
+const name = (id: string) => `${byId[id].label} ${byId[id].title}: ${byId[id].what}`;
+const stageLine = (m: CourseModule) =>
+  m.status === "merged" ? `${m.stages.length} stages` : `${m.stagesWritten} of ${m.stages.length} stages written`;
+---
+
+<miubais-factory-map class="mg-map not-content" data-initial={initial}>
+  <div class="canvas">
+    <svg viewBox="0 0 1000 430" role="group" aria-label="The factory as a pipeline: a ticket goes through the harness and the review gate to merge">
+      <defs>
+        <marker id="mg-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0 0 L8 4 L0 8 z" class="arrowhead"></path>
+        </marker>
+      </defs>
+
+      <a href={byId.m5.href} class="mod" data-module="m5" aria-label={name("m5")}>
+        <rect x="128" y="92" width="432" height="236" class="boundary"></rect>
+        <rect x="128" y="92" width="180" height="34" class="hit"></rect>
+        <text x="140" y="110" class="label">M5 security<tspan class="note" dx="8">boundary</tspan></text>
+        {marks("m5", 140, 116).map((k) => <rect x={k.x} y={k.y} width="8" height="8" class="mark" data-exercise={k.exercise} data-stage={k.stage}><title>{k.stage}</title></rect>)}
+      </a>
+
+      <line x1="88" y1="216" x2="182" y2="216" class="flow" marker-end="url(#mg-arrow)"></line>
+      <g class="fixed">
+        <rect x="16" y="196" width="72" height="40" class="box"></rect>
+        <text x="52" y="221" class="label" text-anchor="middle">ticket</text>
+      </g>
+
+      <a href={byId.m1.href} class="mod" data-module="m1" aria-label={name("m1")}>
+        <rect x="160" y="140" width="380" height="156" class="station"></rect>
+        <text x="172" y="160" class="label">M1 harness</text>
+        {marks("m1", 172, 168).map((k) => <rect x={k.x} y={k.y} width="8" height="8" class="mark" data-exercise={k.exercise} data-stage={k.stage}><title>{k.stage}</title></rect>)}
+        <rect x="184" y="196" width="120" height="52" class="box"></rect>
+        <text x="244" y="227" class="label" text-anchor="middle">model</text>
+        <rect x="392" y="196" width="120" height="52" class="box"></rect>
+        <text x="452" y="227" class="label" text-anchor="middle">tools</text>
+        <line x1="304" y1="210" x2="390" y2="210" class="flow" marker-end="url(#mg-arrow)"></line>
+        <line x1="392" y1="234" x2="306" y2="234" class="flow" marker-end="url(#mg-arrow)"></line>
+        <text x="348" y="203" class="note" text-anchor="middle">tool_use</text>
+        <text x="348" y="250" class="note" text-anchor="middle">result</text>
+        <text x="348" y="282" class="note" text-anchor="middle">loop until done or capped</text>
+      </a>
+
+      <a href={byId.m0.href} class="mod" data-module="m0" aria-label={name("m0")}>
+        <path d="M272 148 h96 v34 h-96 l-8 -17 z" class="tag"></path>
+        <circle cx="272" cy="165" r="2" class="tag-hole"></circle>
+        <line x1="300" y1="182" x2="300" y2="196" class="rule"></line>
+        <text x="280" y="162" class="label small">M0 $/call</text>
+        {marks("m0", 280, 168).map((k) => <rect x={k.x} y={k.y} width="8" height="8" class="mark" data-exercise={k.exercise} data-stage={k.stage}><title>{k.stage}</title></rect>)}
+      </a>
+
+      <a href={byId.m2.href} class="mod" data-module="m2" aria-label={name("m2")}>
+        <rect x="164" y="20" width="160" height="48" class="instrument"></rect>
+        <text x="176" y="38" class="label">M2 evals</text>
+        {marks("m2", 176, 48).map((k) => <rect x={k.x} y={k.y} width="8" height="8" class="mark" data-exercise={k.exercise} data-stage={k.stage}><title>{k.stage}</title></rect>)}
+        <line x1="244" y1="68" x2="244" y2="138" class="probe"></line>
+        <circle cx="244" cy="140" r="3" class="tap"></circle>
+      </a>
+
+      <a href={byId.m3.href} class="mod" data-module="m3" aria-label={name("m3")}>
+        <rect x="372" y="20" width="160" height="48" class="instrument"></rect>
+        <text x="384" y="38" class="label">M3 traces</text>
+        {marks("m3", 384, 48).map((k) => <rect x={k.x} y={k.y} width="8" height="8" class="mark" data-exercise={k.exercise} data-stage={k.stage}><title>{k.stage}</title></rect>)}
+        <line x1="452" y1="68" x2="452" y2="138" class="probe"></line>
+        <circle cx="452" cy="140" r="3" class="tap"></circle>
+      </a>
+      <text x="548" y="40" class="note">measure the line</text>
+
+      <a href={byId.m6.href} class="mod" data-module="m6" aria-label={name("m6")}>
+        <line x1="244" y1="248" x2="244" y2="354" class="call" marker-end="url(#mg-arrow)"></line>
+        <rect x="164" y="356" width="160" height="62" class={byId.m6.status === "merged" ? "infra" : "infra open"}></rect>
+        <text x="176" y="376" class="label">M6 serving</text>
+        {marks("m6", 176, 382).map((k) => <rect x={k.x} y={k.y} width="8" height="8" class="mark" data-exercise={k.exercise} data-stage={k.stage}><title>{k.stage}</title></rect>)}
+        {byId.m6.status !== "merged" && <text x="176" y="410" class="note hold">{byId.m6.status}</text>}
+      </a>
+
+      <a href={byId.m4.href} class="mod" data-module="m4" aria-label={name("m4")}>
+        <line x1="452" y1="248" x2="452" y2="354" class="call" marker-end="url(#mg-arrow)"></line>
+        <rect x="372" y="356" width="160" height="62" class="infra"></rect>
+        <text x="384" y="376" class="label">M4 retrieval</text>
+        {marks("m4", 384, 382).map((k) => <rect x={k.x} y={k.y} width="8" height="8" class="mark" data-exercise={k.exercise} data-stage={k.stage}><title>{k.stage}</title></rect>)}
+      </a>
+      <text x="548" y="390" class="note">infrastructure the line calls</text>
+
+      <line x1="512" y1="222" x2="662" y2="222" class="flow" marker-end="url(#mg-arrow)"></line>
+      <text x="568" y="214" class="note">pull request</text>
+
+      <a href={byId.m7.href} class="mod" data-module="m7" aria-label={name("m7")}>
+        <rect x="664" y="176" width="180" height="92" class="station"></rect>
+        <line x1="676" y1="176" x2="676" y2="268" class="post"></line>
+        <line x1="832" y1="176" x2="832" y2="268" class="post"></line>
+        <text x="754" y="202" class="label" text-anchor="middle">M7 pre-review</text>
+        <text x="754" y="222" class="note" text-anchor="middle">merge · hold · block</text>
+        {marks("m7", 711, 244).map((k) => <rect x={k.x} y={k.y} width="8" height="8" class="mark" data-exercise={k.exercise} data-stage={k.stage}><title>{k.stage}</title></rect>)}
+      </a>
+
+      <line x1="844" y1="222" x2="870" y2="222" class="flow" marker-end="url(#mg-arrow)"></line>
+      <g class="fixed">
+        <rect x="872" y="202" width="120" height="40" class="box"></rect>
+        <text x="932" y="226" class="label small" text-anchor="middle">merge → deploy</text>
+      </g>
+    </svg>
+  </div>
+
+  <aside class="panel" aria-live="polite">
+    {
+      modules.map((m) => (
+        <section data-panel={m.id} hidden={m.id !== initial}>
+          <p class="id">
+            {m.label} · <span class={m.status === "merged" ? "pass" : "hold"}>{m.status}</span>
+          </p>
+          <h3>
+            <a href={m.href}>{m.title}</a>
+          </h3>
+          <p class="what">{m.what}</p>
+          <dl>
+            <dt>stages</dt>
+            <dd>{stageLine(m)}</dd>
+            <dt>live record</dt>
+            <dd>{m.live}</dd>
+          </dl>
+          {m.lessons.length > 0 && (
+            <ol class="lessons">
+              {m.lessons.map((l) => (
+                <li>
+                  <a href={l.href}>{l.title}</a>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      ))
+    }
+    <p class="api-note" hidden>local API not running: start it with <code>uv run miubais serve</code></p>
+  </aside>
+</miubais-factory-map>
+
+<script>
+  import "./factory-map";
+</script>
+
+<style>
+  .mg-map {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 17.5rem;
+    gap: 1.5rem;
+    margin: 0 0 2.25rem;
+    color: var(--mg-ink);
+  }
+  .canvas {
+    overflow-x: auto;
+  }
+  svg {
+    display: block;
+    width: 100%;
+    min-width: 600px;
+    height: auto;
+    font-family: var(--__sl-font-mono);
+  }
+  .label {
+    font-size: 14px;
+    fill: var(--mg-ink);
+  }
+  .label.small,
+  .note {
+    font-size: 12px;
+  }
+  .note {
+    fill: var(--mg-mute);
+  }
+  .note.hold {
+    fill: var(--mg-hold);
+  }
+  .box,
+  .station,
+  .instrument,
+  .infra,
+  .tag {
+    fill: var(--mg-bg);
+    stroke: var(--mg-ink);
+    stroke-width: 1;
+  }
+  .instrument,
+  .infra,
+  .tag {
+    fill: var(--mg-bg-sub);
+  }
+  .infra.open {
+    stroke: var(--mg-hold);
+    stroke-dasharray: 4 3;
+  }
+  .boundary {
+    fill: none;
+    stroke: var(--mg-mute);
+    stroke-width: 1;
+    stroke-dasharray: 6 4;
+  }
+  .hit {
+    fill: transparent;
+  }
+  .tag-hole {
+    fill: var(--mg-bg);
+    stroke: var(--mg-ink);
+  }
+  .post {
+    stroke: var(--mg-ink);
+    stroke-width: 3;
+  }
+  .flow,
+  .rule {
+    stroke: var(--mg-ink);
+    stroke-width: 1;
+  }
+  .arrowhead {
+    fill: var(--mg-ink);
+  }
+  .probe {
+    stroke: var(--mg-mute);
+    stroke-width: 1;
+    stroke-dasharray: 2 3;
+  }
+  .tap {
+    fill: var(--mg-mute);
+  }
+  .call {
+    stroke: var(--mg-mute);
+    stroke-width: 1;
+    stroke-dasharray: 4 3;
+  }
+  .mark {
+    fill: none;
+    stroke: var(--mg-mute);
+    stroke-width: 1;
+  }
+  .mark[data-status="passed"] {
+    fill: var(--mg-pass);
+    stroke: var(--mg-pass);
+  }
+  .mark[data-status="failed"] {
+    fill: var(--mg-block);
+    stroke: var(--mg-block);
+  }
+  .mark[data-status="skipped"] {
+    fill: var(--mg-hold);
+    stroke: var(--mg-hold);
+  }
+  .mod {
+    cursor: pointer;
+    outline: none;
+    text-decoration: none;
+  }
+  .mod :is(.box, .station, .instrument, .infra, .tag, .boundary, .label) {
+    transition:
+      stroke 120ms,
+      fill 120ms;
+  }
+  .mod.is-active :is(.station, .instrument, .infra, .tag, .boundary),
+  .mod:focus-visible :is(.station, .instrument, .infra, .tag, .boundary) {
+    stroke: var(--mg-link);
+  }
+  .mod.is-active > .label,
+  .mod.is-active .tag ~ .label {
+    fill: var(--mg-link);
+  }
+  .mod:focus-visible :is(.station, .instrument, .infra, .tag, .boundary) {
+    stroke-width: 2;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mod :is(.box, .station, .instrument, .infra, .tag, .boundary, .label) {
+      transition: none;
+    }
+  }
+  .panel {
+    border-left: 1px solid var(--mg-rule);
+    padding-left: 1.25rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+  .panel .id {
+    margin: 0;
+    font: 0.8125rem var(--__sl-font-mono);
+    color: var(--mg-mute);
+  }
+  .pass {
+    color: var(--mg-pass);
+  }
+  .hold {
+    color: var(--mg-hold);
+  }
+  h3 {
+    margin: 0.25rem 0 0.375rem;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  a {
+    color: var(--mg-link);
+    text-decoration: none;
+  }
+  .panel a:hover {
+    text-decoration: underline;
+  }
+  .what {
+    margin: 0 0 0.75rem;
+    color: var(--mg-mute);
+  }
+  dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.125rem 0.75rem;
+    margin: 0 0 0.75rem;
+    font: 0.8125rem var(--__sl-font-mono);
+  }
+  dt {
+    color: var(--mg-mute);
+  }
+  dd {
+    margin: 0;
+  }
+  .lessons {
+    margin: 0;
+    padding: 0.625rem 0 0 1.25rem;
+    border-top: 1px solid var(--mg-rule);
+  }
+  .lessons li {
+    margin: 0.125rem 0;
+  }
+  .api-note {
+    margin: 0.75rem 0 0;
+    font-size: 0.8125rem;
+    color: var(--mg-mute);
+  }
+  code {
+    font: 0.8125rem var(--__sl-font-mono);
+  }
+  @media (max-width: 760px) {
+    .mg-map {
+      grid-template-columns: 1fr;
+    }
+    .panel {
+      border-left: 0;
+      border-top: 1px solid var(--mg-rule);
+      padding: 1rem 0 0;
+    }
+  }
+</style>

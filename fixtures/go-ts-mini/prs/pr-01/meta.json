@@ -1,0 +1,9 @@
+{
+  "title": "Show the due date in the web client",
+  "author": "aino",
+  "created_at": "2026-10-15",
+  "approvals": [
+    "bruno"
+  ],
+  "description": "Adds formatDue to the web formatting helpers with tests, so the job list can show when a job is due."
+}

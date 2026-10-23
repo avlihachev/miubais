@@ -1,0 +1,27 @@
+# Opaque bearer tokens for the fixture TokenVerifier (stage 04). Not real credentials.
+# resource under test: https://shop.example.invalid/mcp
+tokens:
+  - token: tok-read-valid
+    audience: https://shop.example.invalid/mcp
+    scopes: [shop:read]
+    expires_at: 2099-01-01T00:00:00Z
+  - token: tok-readwrite-valid
+    audience: https://shop.example.invalid/mcp
+    scopes: [shop:read, shop:write]
+    expires_at: 2099-01-01T00:00:00Z
+  - token: tok-wrong-audience
+    audience: https://other.example.invalid/mcp
+    scopes: [shop:read, shop:write]
+    expires_at: 2099-01-01T00:00:00Z
+  - token: tok-expired
+    audience: https://shop.example.invalid/mcp
+    scopes: [shop:read, shop:write]
+    expires_at: 2020-01-01T00:00:00Z
+  - token: tok-no-scopes
+    audience: https://shop.example.invalid/mcp
+    scopes: []
+    expires_at: 2099-01-01T00:00:00Z
+  - token: tok-other-resource
+    audience: https://analytics.example.invalid/mcp
+    scopes: [shop:read]
+    expires_at: 2099-01-01T00:00:00Z

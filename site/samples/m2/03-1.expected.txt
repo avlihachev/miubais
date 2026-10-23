@@ -1,0 +1,14 @@
+stratum                 train    dev   test
+-------------------------------------------
+budget-blowout              4      8      8
+context-loss                4      8      8
+loop                        4      8      8
+policy-denied-retry         4      8      8
+scope-creep                 4      8      8
+silent-skip                 4      8      8
+success                    12     24     24
+tool-result-poisoning       4      8      8
+total                      40     80     80
+manifest sha256: d9e279d8abe57445
+same seed, same manifest: True
+ids in train and in dev/test: 0

@@ -1,0 +1,9 @@
+{
+  "title": "Authenticate the web client and add create()",
+  "author": "chen",
+  "created_at": "2026-10-16",
+  "approvals": [
+    "aino"
+  ],
+  "description": "The gateway in front of the service now requires a bearer token; the client sends it and gains a create() call for the new job form."
+}

@@ -1,0 +1,33 @@
+--timeout
+CHAT
+CostAttribute
+EXECUTE_TOOL
+LANGFUSE_USAGE_COST
+MAX_EXPORT_BATCH_SIZE
+RECORDED_EPOCH_NS
+SpanTokens
+TOKEN_KEYS
+Tally
+USAGE_KEYS
+_chat_span
+_count
+_fail
+_operation
+_task_cost
+_tool_span
+_trace
+a router needs at least one route
+last_ms
+load_traces
+on_start
+open_tools
+parser
+previous_ms
+root_attributes
+route names must be unique: 
+span_tokens
+success and policy stops never fall back
+tally
+usage_attributes
+| route | model | attempts | successes | cost_usd | turns |
+| ticket | usd | calls | cache-hit % |

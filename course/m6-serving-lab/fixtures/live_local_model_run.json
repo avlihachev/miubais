@@ -1,0 +1,23 @@
+{
+  "date": "2026-10-22",
+  "stage": "02-local-model",
+  "runtime": "ollama",
+  "model": "qwen3.5:0.8b",
+  "machine_class": "Apple Silicon, CPU/GPU shared",
+  "requests": 8,
+  "failed": 0,
+  "concurrency": 2,
+  "max_tokens": 48,
+  "ttft_ms": {
+    "p50": 2281.5,
+    "p90": 2526.7,
+    "p99": 2526.7
+  },
+  "tps_p50": 24.8,
+  "throughput_tps": 19.8,
+  "wall_s": 16.68,
+  "floors": {
+    "p50_tps": 5,
+    "ttft_ms": 10000
+  }
+}

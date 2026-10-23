@@ -1,0 +1,10 @@
+{
+  "title": "Add a turnaround priority to jobs",
+  "author": "bruno",
+  "created_at": "2026-10-14",
+  "approvals": [
+    "aino",
+    "chen"
+  ],
+  "description": "Adds an optional priority (standard or rush) to the proto contract, the model and POST /jobs, with validation and a changelog entry."
+}

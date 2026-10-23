@@ -1,0 +1,10 @@
+steady            gate ok
+drop              gate failed
+  pass_rate fell from 0.4450 to 0.4200 (more than 2 percentage points)
+loop spike        gate failed
+  loop rose from 18 to 22 (more than 3)
+exactly 2 points  gate ok
+
+float drop:            0.020000000000000018
+float drop > 0.02:     True
+ten-thousandths drop:  200 (limit 200)

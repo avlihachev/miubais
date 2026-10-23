@@ -1,0 +1,2 @@
+sent: {"model": "claude-opus-5-5", "max_tokens": 64000, "output_config": {"effort": "low", "task_budget": {"type": "tokens", "total": 40000}}, "stream": true}
+stop_reason: end_turn usage: 40 9

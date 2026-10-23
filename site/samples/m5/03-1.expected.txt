@@ -1,0 +1,7 @@
+ANTHROPIC_API_KEY=[REDACTED:anthropic-key] {'anthropic-key': 1}
+aws_access_key_id = [REDACTED:aws-access-key] {'aws-access-key': 1}
+curl -H 'Authorization: Bearer [REDACTED:bearer-token]' https://api.exam {'bearer-token': 1}
+{"log": "{\"GITHUB_TOKEN\": \"[REDACTED:github-token]\"}"} {'github-token': 1}
+cache entry: [REDACTED:anthropic-key] {'anthropic-key': 1}
+GET /search?token=page2&sort=asc 200 {}
+subprocess env: ['HOME', 'PATH', 'PYTHONHASHSEED']

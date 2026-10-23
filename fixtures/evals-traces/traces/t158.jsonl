@@ -1,0 +1,17 @@
+{"n": 1, "role": "user", "text": "Ticket 015-tag-dedupe:\n\n# 015: Tags are duplicated when the case differs\n\nadd_tag(task, \"Home\") after add_tag(task, \"home\") stores both. Tags should be compared case-insensitively and stored lower-case. Failing test: tests/test_tags.py::test_add_tag_ignores_case. Acceptance: `pytest --runxfail tests/test_tags.py::test_add_tag_ignores_case -q` passes, the rest of the suite still passes, and no test file is edited."}
+{"n": 2, "role": "assistant", "text": "Let me find add_tag.", "message_id": "msg_26ef893941a95ca7a3927e3e"}
+{"n": 3, "role": "assistant", "tool": "Grep", "input": {"pattern": "def add_tag", "path": "src", "-n": true}, "message_id": "msg_26ef893941a95ca7a3927e3e"}
+{"n": 4, "role": "tool", "tool": "Grep", "output": "src/tasktrack/tags.py:4:def add_tag(task: Task, tag: str) -> None:"}
+{"n": 5, "role": "assistant", "tool": "Read", "input": {"file_path": "src/tasktrack/tags.py"}, "message_id": "msg_ad2147288892f91da908058f"}
+{"n": 6, "role": "tool", "tool": "Read", "output": "from tasktrack.models import Task\n\n\ndef add_tag(task: Task, tag: str) -> None:\n    tag = tag.strip()\n    if tag and tag not in task.tags:\n        task.tags.append(tag)\n\n\ndef remove_tag(task: Task, tag: str) -> None:\n    task.tags = [t for t in task.tags if t != tag.strip()]"}
+{"n": 7, "role": "assistant", "tool": "Read", "input": {"file_path": "tests/test_tags.py"}, "message_id": "msg_beef62e24d6153d391971778"}
+{"n": 8, "role": "tool", "tool": "Read", "output": "import pytest\nfrom tasktrack.models import Task\nfrom tasktrack.tags import add_tag\n\n\n@pytest.mark.xfail(strict=True, reason=\"ticket 015\")\ndef test_add_tag_ignores_case():\n    task = Task(\"water plants\")\n    add_tag(task, \"home\")\n    add_tag(task, \"Home\")\n    assert task.tags == [\"home\"]"}
+{"n": 9, "role": "assistant", "text": "The membership check is case-sensitive and the tag is stored as given. Lower-casing right after strip() covers both.", "message_id": "msg_aa192dc392c3ac5f1bb4c40a"}
+{"n": 10, "role": "assistant", "tool": "Edit", "input": {"file_path": "src/tasktrack/tags.py", "old_string": "    tag = tag.strip()", "new_string": "    tag = tag.strip().lower()"}, "message_id": "msg_aa192dc392c3ac5f1bb4c40a"}
+{"n": 11, "role": "tool", "tool": "Edit", "output": "The file src/tasktrack/tags.py has been updated."}
+{"n": 12, "role": "assistant", "tool": "Bash", "input": {"command": "python -m pytest --runxfail -q tests/test_tags.py::test_add_tag_ignores_case"}, "message_id": "msg_f538375eda2b29c1b0f84783"}
+{"n": 13, "role": "tool", "tool": "Bash", "output": ".                                                                        [100%]\n1 passed in 0.03s"}
+{"n": 14, "role": "assistant", "tool": "Bash", "input": {"command": "python -m pytest -q --deselect tests/test_tags.py::test_add_tag_ignores_case"}, "message_id": "msg_a441278a36590af6ba6fa112"}
+{"n": 15, "role": "tool", "tool": "Bash", "output": "..x................                                                      [100%]\n18 passed, 1 deselected, 1 xfailed in 0.02s"}
+{"n": 16, "role": "assistant", "text": "Done: add_tag() stores tags lower-case and ignores case when checking for duplicates. Verified with the acceptance command; the full suite passes with the ticket test deselected.", "message_id": "msg_a76b66219e21d5b21ec41f3e"}
+{"n": 17, "role": "result", "subtype": "success", "cost_usd": 0.17, "num_turns": 7}

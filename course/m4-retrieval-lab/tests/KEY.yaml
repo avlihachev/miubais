@@ -1,0 +1,58 @@
+# Retrieval error-analysis key for stage 07: the golden queries the reference pipeline
+# (HashEmbedder + full text + LexicalReranker + MMR) misses at k = 10, read query by query.
+# failure lists the kinds that count as an answer (the first is the key's own reading);
+# fix is the key's choice and is not graded. On the honour system: read it only to check
+# your own RETRIEVAL_ANALYSIS.md.
+failures:
+  q01:
+    failure: [vocabulary-gap]
+    fix: better-embedder
+    why: '"reading the input / writing the reply" never meets "prefill / decode / compute-bound"; neither side puts the chunk in the top 50'
+  q07:
+    failure: [vocabulary-gap]
+    fix: query-rewrite
+    why: '"vendor ... economical" against "price candidates on cost per solved task"; full text reaches it only at rank 34'
+  q08:
+    failure: [vocabulary-gap]
+    fix: better-embedder
+    why: '"system message alone ... dangerous things" against "prompts suggest, hooks enforce"; no shared content word'
+  q14:
+    failure: [vocabulary-gap]
+    fix: better-embedder
+    why: '"hold off drafting grading guidelines" against "do not write the rubric first"; absent from both lists'
+  q17:
+    failure: [vocabulary-gap, chunk-boundary]
+    fix: better-embedder
+    why: '"attempts at the same work item ... evaluation partition" against "two runs of the same ticket ... dev and test"; the chunk opens on stratified sampling'
+  q24:
+    failure: [reranker-demotion, anchor-ambiguity]
+    fix: hybrid-weights
+    why: 'fused rank 7, BM25 rerank pushes it to 20; the chunk that answers in other words (#004, "what the process can physically reach") is first'
+  q29:
+    failure: [chunk-boundary, anchor-ambiguity]
+    fix: contextual-chunk-headers
+    why: 'the proto field-number section is split in two; #014 (the rule, "never be reused") ranks 1, the anchor half #015 lost the heading and ranks 35 in full text only'
+  q31:
+    failure: [vocabulary-gap]
+    fix: query-rewrite
+    why: '"rejecting outright / parking until someone signs off" against "block / hold"; absent from both lists'
+  q35:
+    failure: [ranking]
+    fix: hybrid-weights
+    why: '"sluggish ... optimising the functions it invokes" against "wall time ... chat spans ... not faster tools"; vectors rank it 9, full text only at 259, so RRF drops it to 24, and the rerank lifts it back only to 10 and MMR to 11'
+  q37:
+    failure: [anchor-ambiguity, ranking]
+    fix: smaller-chunks
+    why: '#002 ("she had only $1.87 with which to buy Jim a present") answers at rank 5 without the anchor; the anchor chunk #000 shares only "Della" with the query and spends most of its text on the flat, so vectors rank it 69, full text 15, fused 29, rerank and MMR 11'
+  q39:
+    failure: [vocabulary-gap]
+    fix: better-embedder
+    why: '"husband / wife / hair ornaments / pay" against "Jim / Dell / combs / sold the watch"; the story''s other chunks about hair fill the top 10'
+  q42:
+    failure: [chunk-boundary]
+    fix: smaller-chunks
+    why: 'the one-line anchor sits in a chunk about the wallpaper''s colour and pattern, so the chunk''s vector and terms are about the paper, not the journal'
+  q44:
+    failure: [anchor-ambiguity]
+    fix: better-embedder
+    why: '#025 ("The front pattern does move ... The woman behind shakes it!") answers the question at rank 2; the anchor chunk #016 is not in the pool'

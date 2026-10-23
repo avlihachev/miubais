@@ -1,0 +1,174 @@
+---
+title: Langfuse, self-hosted
+description: Running Langfuse v4 locally with Docker Compose, sending spans to its OTLP endpoint with the right headers, reading a trace back through the v2 Observations API, and what the course's own live traced run showed.
+module: m3
+order: 3
+verified_on: 2026-10-17
+executed: local
+pins:
+  "pypi:claude-agent-sdk": "0.2.168"
+  "pypi:opentelemetry-sdk": "1.45.1"
+  "model:default": claude-opus-5-5
+sources:
+  - url: https://langfuse.com/self-hosting/deployment/docker-compose
+    title: Docker Compose Deployment (Self-Hosted)
+    checked: 2026-10-17
+  - url: https://github.com/langfuse/langfuse/blob/main/docker-compose.yml
+    title: Langfuse docker-compose.yml
+    checked: 2026-10-17
+  - url: https://langfuse.com/self-hosting/administration/headless-initialization
+    title: Headless Initialization (self-hosted)
+    checked: 2026-10-17
+  - url: https://langfuse.com/integrations/native/opentelemetry
+    title: OpenTelemetry (OTEL) for LLM Observability
+    checked: 2026-10-17
+  - url: https://langfuse.com/docs/observability/overview
+    title: LLM Observability & Application Tracing
+    checked: 2026-10-17
+  - url: https://langfuse.com/docs/api-and-data-platform/features/public-api
+    title: Public API
+    checked: 2026-10-17
+  - url: https://langfuse.com/self-hosting/upgrade/upgrade-guides/upgrade-v3-to-v4
+    title: Migrate Langfuse v3 to v4 (self-hosted)
+    checked: 2026-10-17
+  - url: https://langfuse.com/self-hosting/upgrade/versioning
+    title: Versions & Compatibility
+    checked: 2026-10-17
+  - url: https://github.com/langfuse/langfuse/releases
+    title: Langfuse releases
+    checked: 2026-10-17
+---
+
+import Pipeline from "../../../components/diagrams/Pipeline.astro";
+
+**Prerequisites:** [lesson 02](../02-genai-semantic-conventions/), which names the attributes this lesson ships to a backend.
+
+## Why this matters for the factory
+
+Spans in memory help a test. A factory needs them somewhere people can search a week later: which tickets failed on Tuesday, what the costliest run looked like, whether last night's model change made turns slower. That is a tracing backend.
+
+Langfuse is an open-source backend built for LLM traces that takes OpenTelemetry directly, so the spans from lessons 01 and 02 go in without a vendor SDK. Self-hosting it keeps traces, which in a coding factory can contain source code and file paths, on your own machines. The cost is operating a six-container stack and keeping up with its version changes, one of which, the v4 data model, changed how you read traces back. This lesson runs it locally, sends spans to it, and reads them back the way the exercise's live stage does.
+
+## Core idea
+
+Langfuse describes traces as "structured logs of every request that capture the exact prompt sent, the model's response, token usage, latency", shown as "nested observations, timing, inputs, outputs, and metadata" (LLM Observability & Application Tracing). An OpenTelemetry span becomes an observation, and an observation has a type. The course's live run showed the mapping on Langfuse 4.63.0: the root `invoke_agent ticket-runner` became an `AGENT` observation, each `chat {model}` span a `GENERATION`, and each `execute_tool {name}` span a `TOOL` observation named after the tool alone (`Bash`, `Edit`).
+
+What Langfuse adds on top of storing spans is what Langfuse's overview lists as features beyond tracing: "LLM-as-a-Judge evaluation, prompt management, experiments and datasets, and custom dashboards", and it notes that observability "gives your evaluations real production traces to run on". For this course that closes a loop: M2's judge can score production traces, and a failing trace can become a dataset item for the next regression run.
+
+<Pipeline
+  label="How spans reach a local Langfuse and come back"
+  from="harness"
+  to="`GET /api/public/v2/observations?traceId=…` from your tests, scripts, dashboards"
+  steps={[
+    { name: "record_run", does: ["spans from the run's messages"] },
+    { name: "BatchSpanProcessor", does: ["batches finished spans"] },
+    {
+      name: "OTLPSpanExporter",
+      does: ["HTTP/protobuf to `http://localhost:3000/api/public/otel/v1/traces`", "headers `Authorization: Basic …`, `x-langfuse-ingestion-version: 4`"],
+    },
+    { name: "Langfuse", does: ["web, worker, Postgres, ClickHouse, Redis, MinIO"] },
+  ]}
+/>
+
+## Mechanics
+
+### The stack
+
+Langfuse's Docker Compose page has you clone the repository and run `docker compose up`, then says "After about 2-3 minutes, the langfuse-web-1 container should log "Ready"". It recommends "at least 4 cores and 16 GiB of memory" for the VM (Docker Compose Deployment (Self-Hosted)). The upstream `docker-compose.yml` has six services: `langfuse-web` and `langfuse-worker` (images `langfuse/langfuse:4` and `langfuse/langfuse-worker:4`), `clickhouse/clickhouse-server:25.12`, `postgres:17` (through `${POSTGRES_VERSION:-17}`), `redis:7` and Chainguard's `minio`. Upstream publishes the UI on `3000:3000` and MinIO's S3 port on `9090:9000` on every interface, and binds the worker (3030), the MinIO console (9091), ClickHouse (8123, 9000), Redis (6379) and Postgres (5432) to `127.0.0.1`.
+
+The course's `course/m3-trace-lab/docker-compose.yml` is a trimmed copy with the same images and two deliberate changes. Only the UI (`127.0.0.1:3000`) and MinIO's S3 port (`127.0.0.1:9090`, for media uploads from the browser) are published, both on localhost, so the stack does not clash with a local Postgres or Redis and is not reachable from the network. And the `langfuse-web` healthcheck calls `http://$HOSTNAME:3000/api/public/health`, because in the 4.63.0 image the web server listens on the container's hostname interface rather than on `127.0.0.1` (observed while building the exercise). Start it from the repository root with `docker compose -f course/m3-trace-lab/docker-compose.yml up -d` and wait for `langfuse-web` to report `healthy` in `docker compose ... ps`.
+
+The stack starts already configured. Langfuse's headless initialization reads `LANGFUSE_INIT_ORG_ID`, `LANGFUSE_INIT_ORG_NAME`, `LANGFUSE_INIT_PROJECT_ID`, `LANGFUSE_INIT_PROJECT_NAME`, `LANGFUSE_INIT_PROJECT_PUBLIC_KEY`, `LANGFUSE_INIT_PROJECT_SECRET_KEY`, `LANGFUSE_INIT_USER_EMAIL`, `LANGFUSE_INIT_USER_NAME` and `LANGFUSE_INIT_USER_PASSWORD`, and "Langfuse will automatically create the specified resources on startup if they don't already exist" (Headless Initialization (self-hosted)). The course sets organisation `miubais`, project `m3-trace-lab` and the keys `pk-lf-miubais` / `sk-lf-miubais`. Because creation happens only when the resources are missing, changing a key in the compose file after the first start does nothing until you remove the volumes with `down -v`. The keys and secrets in that file are fixed local placeholders; a stack that leaves your machine needs real ones.
+
+### Sending spans
+
+Langfuse accepts OTLP at `/api/public/otel`, with traces at `/api/public/otel/v1/traces`. Its OpenTelemetry page says "Langfuse currently supports OTLP over HTTP with both `HTTP/JSON` and `HTTP/protobuf`" and "`gRPC` is not supported yet". Authentication is Basic: "Langfuse uses Basic Auth to authenticate requests", with the base64 of `public_key:secret_key`. One more header matters for v4: send "`x-langfuse-ingestion-version: 4` header so that new data appears in real time", because "Without this header, directly ingested OpenTelemetry data can be delayed by up to 10 minutes" (OpenTelemetry (OTEL) for LLM Observability). The same page's collector example writes the pair as `OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic ${AUTH_STRING},x-langfuse-ingestion-version=4"` and builds the token with `echo -n "pk-lf-1234567890:sk-lf-1234567890" | base64`, warning that GNU `base64` may need `-w 0` for long keys (OpenTelemetry (OTEL) for LLM Observability).
+
+In Python that is `OTLPSpanExporter(endpoint=..., headers=..., timeout=...)` from `opentelemetry.exporter.otlp.proto.http.trace_exporter`, which speaks HTTP/protobuf. The exporter's `endpoint` argument is the full traces URL, so pass `.../api/public/otel/v1/traces`, not the base. Stage 04 of the exercise builds exactly this and tests it against a fake collector. The sample below builds the endpoint and headers with placeholder keys and decodes the token again, which is how you check a header by hand. No network call is made; run it with `PYTHONPATH=course/m3-trace-lab/starter/src:course/m3-trace-lab/lesson_support/src uv run --frozen python site/samples/m3/03-1.py`.
+
+Sample: `site/samples/m3/03-1.py`.
+
+```python
+import base64
+
+from trace_lab_lessons import langfuse_headers, observations_url, otlp_traces_endpoint
+
+PUBLIC_KEY = "pk-lf-example"
+SECRET_KEY = "sk-lf-example"
+
+print("POST", otlp_traces_endpoint("http://localhost:3000/"))
+headers = langfuse_headers(PUBLIC_KEY, SECRET_KEY)
+for name, value in headers.items():
+    print(f"  {name}: {value}")
+
+token = headers["Authorization"].removeprefix("Basic ")
+print("  decoded:", base64.b64decode(token).decode())
+print("GET ", observations_url("http://localhost:3000", "c6339da141692f1f040f1de64e41c859"))
+```
+
+Output, run on 2026-10-17:
+
+```
+POST http://localhost:3000/api/public/otel/v1/traces
+  Authorization: Basic cGstbGYtZXhhbXBsZTpzay1sZi1leGFtcGxl
+  x-langfuse-ingestion-version: 4
+  decoded: pk-lf-example:sk-lf-example
+GET  http://localhost:3000/api/public/v2/observations?traceId=c6339da141692f1f040f1de64e41c859&limit=100
+```
+
+Basic auth is encoding, not encryption: anyone who sees the header has both keys. On localhost that is acceptable; anywhere else, put TLS in front. The trailing slash on the base URL is stripped, so `http://localhost:3000/` does not produce a double slash in the path.
+
+### Reading traces back
+
+On v4 the old read path is gone. The v3 to v4 upgrade guide says the default write mode is `events_only` ("No configuration is needed; this is the v4 default"), that "The following legacy endpoints are unavailable on deployments that run the default write mode", and its table lists `GET /api/public/traces` as "Returns `404`". For fetching a trace its answer is: "Use the Observations API v2 with a `traceId` filter" (Migrate Langfuse v3 to v4 (self-hosted)). On the course's stack, Langfuse 4.63.0 answered a `GET /api/public/traces` with a message that the endpoint "is not available on deployments running in Langfuse v4 events_only mode" (observed while building stage 08; the exact status and wording may differ between releases, but the endpoint is not usable either way).
+
+The replacement is `GET /api/public/v2/observations`, which Langfuse's Public API page says is "available on Langfuse Cloud and self-hosted Langfuse v4", with a `traceId` parameter for "Observations of one trace" and a `fields` parameter to request "only the field groups you need" (Public API). It returns observations, not traces: you rebuild the tree from `parentObservationId`. Stage 08's test does that with one page of up to 100 observations, Basic auth with the same keys, polling for up to 60 seconds until one observation per span has arrived.
+
+### Versions
+
+Langfuse's versioning page marks "OSS v4 (GA)" and OSS v3 as "Deprecated", with v3 security patches "Through January 31, 2027". The Python SDK v5 "Requires self-hosted server ≥ 4.59.0; OSS v3 and older are unsupported", and the advice for v3 is "If you self-host Langfuse v3, stay on Python SDK v4" (Versions & Compatibility). The upgrade guide adds that "Python SDK v5 and JS/TS SDK v6 require Langfuse v4", and that for real-time visibility you should "use Python SDK ≥ 4.7.0, JS/TS SDK ≥ 5.4.0, or send `x-langfuse-ingestion-version: 4`"; older v4-era SDKs still ingest "but can appear with the same ~15 minute delay" (Migrate Langfuse v3 to v4 (self-hosted)); the OpenTelemetry page quoted above puts the same delay at up to 10 minutes. The course uses no Langfuse SDK at all, only the OpenTelemetry exporter and the header, which keeps it out of this matrix. The latest release on 2026-10-17 was v4.63.0 (Langfuse releases), and the compose file tracks the `:4` tags, so a `docker compose pull` can move you to a newer 4.x.
+
+### The course's live run
+
+Stage 08 ran tinyshop ticket `001-discount-rounding` on `claude-opus-5-5` through the budget guard (limit 0.75 USD and 12 turns, the `LIMIT_USD` and `MAX_TURNS` constants of `tests/test_08_live_traced_ticket.py`), recorded the messages as spans, exported them to this stack, and read them back. The record, `course/m3-trace-lab/fixtures/live_traced_run.json`, says: `stopped_by` `success`, 5 turns, 17,649 ms, one file changed (`src/tinyshop/pricing.py`), trace id `c6339da141692f1f040f1de64e41c859`, spans `invoke_agent` 1, `chat` 4, `execute_tool` 4, and observations `AGENT` 1, `GENERATION` 4, `TOOL` 4 on Langfuse 4.63.0. Every span arrived and kept its parent. The 5 turns are the SDK's own `num_turns` from the result message, which the SDK reference does not define; the 4 chat spans are the distinct `message_id`s in the stream. The two counts need not match, and the course did not establish what the fifth turn is, so use `num_turns` for the `max_turns` cap and the span count for what the stream showed.
+
+The cost is where the two systems disagreed. The SDK reported 0.2074 USD for the run. Langfuse, left to compute cost from each generation's usage with its own model prices, showed 0.1179 USD. The main reason is the one from lesson 01: on a live stream each assistant message carries the output count from `message_start`, a placeholder, so the per-generation output tokens Langfuse priced were far below what the model actually produced, and output tokens are the most expensive kind. The SDK's figure is itself a client-side estimate, not a bill. Lesson 04 decides which number the factory trusts and how to make the spans carry it; stage 04's exporter already attaches `gen_ai.usage.cost` per chat span for the recorded runs, where the per-message counts are real.
+
+## Common pitfalls
+
+- **Pointing a gRPC exporter at Langfuse.** It takes OTLP over HTTP only. Use the `proto.http` exporter and the full `/v1/traces` URL.
+- **Forgetting the ingestion header.** Spans still arrive, but up to 10 minutes late, and a test that polls for 60 seconds fails for no visible reason.
+- **Reading traces with `GET /api/public/traces` on v4.** It is unavailable in the default `events_only` mode. Query `/api/public/v2/observations?traceId=...` and rebuild the tree yourself.
+- **Changing init keys after the first start.** Headless Initialization (self-hosted) only creates missing resources. Remove the volumes or rotate keys in the UI.
+- **Publishing every port.** Upstream binds the UI and MinIO to all interfaces. For a local stack, bind to `127.0.0.1` and keep the databases inside the compose network.
+- **Trusting backend-computed cost on live spans.** Placeholder output counts make it low. Send your own `gen_ai.usage.cost`, computed from the numbers you trust.
+
+## What interviewers ask
+
+**How do you get OpenTelemetry spans into Langfuse without its SDK?**
+Use the OTLP HTTP exporter pointed at `/api/public/otel/v1/traces`, with `Authorization: Basic` over `public_key:secret_key` and `x-langfuse-ingestion-version: 4`. Langfuse maps the GenAI attributes onto its observation fields.
+
+**Why self-host the tracing backend for a coding agent?**
+Traces of a coding agent contain file paths, diffs and sometimes secrets from the context. Self-hosting keeps them inside your boundary; the price is running Postgres, ClickHouse, Redis and object storage, and following the backend's version changes.
+
+**What changed for reading traces between Langfuse v3 and v4?**
+v4 writes to a new events model by default, and the legacy read endpoints such as `GET /api/public/traces` are unavailable there. You read through the Observations API v2, filtering by `traceId` and rebuilding the tree from parent ids.
+
+**Your backend shows a lower cost than the SDK for the same run. Why?**
+Most likely the backend priced per-generation usage from a live stream, where per-step output tokens are placeholders. Attach your own cost per span, or reconcile against the result message, and say which number is authoritative.
+
+**What does Langfuse give you beyond a generic tracing backend?**
+Token, model and cost fields as first-class data, plus prompt management, datasets and experiments, and evaluations that run on production traces. That lets the eval loop from M2 run on real traffic.
+
+## Sources
+
+- [Docker Compose Deployment (Self-Hosted)](https://langfuse.com/self-hosting/deployment/docker-compose), Langfuse, checked 2026-10-17
+- [Langfuse docker-compose.yml](https://github.com/langfuse/langfuse/blob/main/docker-compose.yml), checked 2026-10-17
+- [Headless Initialization (self-hosted)](https://langfuse.com/self-hosting/administration/headless-initialization), Langfuse, checked 2026-10-17
+- [OpenTelemetry (OTEL) for LLM Observability](https://langfuse.com/integrations/native/opentelemetry), Langfuse, checked 2026-10-17
+- [LLM Observability & Application Tracing](https://langfuse.com/docs/observability/overview), Langfuse, checked 2026-10-17
+- [Public API](https://langfuse.com/docs/api-and-data-platform/features/public-api), section Observations API v2, Langfuse, checked 2026-10-17
+- [Migrate Langfuse v3 to v4 (self-hosted)](https://langfuse.com/self-hosting/upgrade/upgrade-guides/upgrade-v3-to-v4), Langfuse, checked 2026-10-17
+- [Versions & Compatibility](https://langfuse.com/self-hosting/upgrade/versioning), Langfuse, checked 2026-10-17
+- [Langfuse releases](https://github.com/langfuse/langfuse/releases), checked 2026-10-17
+- Course code and records (repository files, not web sources): the lesson helpers in `course/m3-trace-lab/lesson_support/src/trace_lab_lessons/`; the compose file `course/m3-trace-lab/docker-compose.yml` and its notes in `course/m3-trace-lab/README.md`; the stage 08 test `course/m3-trace-lab/tests/test_08_live_traced_ticket.py`; the live record `course/m3-trace-lab/fixtures/live_traced_run.json`

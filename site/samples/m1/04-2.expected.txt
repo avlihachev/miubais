@@ -1,0 +1,6 @@
+first call                 ran=True  state=done outcome=comment 9001
+retry in the same process  ran=False state=done outcome=comment 9001
+after a restart            ran=False state=done outcome=comment 9001
+side effect executed once
+deploy raised: connection reset after the request was sent
+deploy retry               ran=False state=claimed outcome=None

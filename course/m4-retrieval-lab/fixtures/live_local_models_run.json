@@ -1,0 +1,80 @@
+{
+  "date": "2026-10-23",
+  "stage": "08-live-local-models",
+  "embedder": "BAAI/bge-small-en-v1.5",
+  "reranker": "Xenova/ms-marco-MiniLM-L-6-v2",
+  "dims": 384,
+  "chunks": 653,
+  "queries": 48,
+  "k": 10,
+  "pool": 50,
+  "mmr_lambda": 0.7,
+  "floors": {
+    "recall": 0.75,
+    "mrr": 0.6
+  },
+  "hybrid": {
+    "recall": 0.74,
+    "precision": 0.077,
+    "mrr": 0.552,
+    "ndcg": 0.598,
+    "by_kind": {
+      "conceptual": {
+        "recall": 0.312,
+        "precision": 0.031,
+        "mrr": 0.102,
+        "ndcg": 0.152,
+        "queries": 16
+      },
+      "factual": {
+        "recall": 0.938,
+        "precision": 0.1,
+        "mrr": 0.742,
+        "ndcg": 0.791,
+        "queries": 16
+      },
+      "lexical": {
+        "recall": 0.969,
+        "precision": 0.1,
+        "mrr": 0.814,
+        "ndcg": 0.85,
+        "queries": 16
+      }
+    }
+  },
+  "reranked": {
+    "recall": 0.781,
+    "precision": 0.081,
+    "mrr": 0.648,
+    "ndcg": 0.674,
+    "by_kind": {
+      "conceptual": {
+        "recall": 0.438,
+        "precision": 0.044,
+        "mrr": 0.243,
+        "ndcg": 0.289,
+        "queries": 16
+      },
+      "factual": {
+        "recall": 1.0,
+        "precision": 0.106,
+        "mrr": 0.805,
+        "ndcg": 0.852,
+        "queries": 16
+      },
+      "lexical": {
+        "recall": 0.906,
+        "precision": 0.094,
+        "mrr": 0.896,
+        "ndcg": 0.882,
+        "queries": 16
+      }
+    }
+  },
+  "seconds": {
+    "index": 49.6,
+    "hybrid_eval": 0.6,
+    "rerank_eval": 79.5
+  },
+  "fused_pool_recall_at_50": 0.875
+}

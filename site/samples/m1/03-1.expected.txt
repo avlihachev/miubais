@@ -1,0 +1,50 @@
+snake_case field: AgentDefinition.__init__() got an unexpected keyword argument 'max_turns'
+agents: ['diff-reviewer']
+reviewer tools: ['Read', 'Grep', 'Glob'] max turns: 8 model: sonnet
+write-capable tools: []
+output_format type: json_schema
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "approve",
+    "findings"
+  ],
+  "properties": {
+    "approve": {
+      "type": "boolean"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "file",
+          "line",
+          "severity",
+          "note"
+        ],
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "severity": {
+            "enum": [
+              "critical",
+              "important",
+              "minor"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

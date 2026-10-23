@@ -1,0 +1,6 @@
+stop_reason=max_tokens in=18 out=16000 cost=$0.320072
+truncated output, refusing to use it: 'A1 costs 12.50 and'
+non-streaming refused client-side: Streaming is required for operations that may take longer than 10 minutes
+streamed stop_reason=max_tokens out=64000
+truncated output, refusing to use it: 'A1 costs 12.50 and 7 are in stock'
+requests that reached the transport: 2

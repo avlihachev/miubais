@@ -1,0 +1,9 @@
+{
+  "title": "Change the translator of a pending job",
+  "author": "aino",
+  "created_at": "2026-10-16",
+  "approvals": [
+    "chen"
+  ],
+  "description": "Adds PUT /jobs/{id}/translator and Service.SetTranslator so a project manager can switch translators before work starts, with a handler test."
+}

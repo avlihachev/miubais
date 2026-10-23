@@ -1,0 +1,174 @@
+---
+import Inline from "./Inline.astro";
+
+interface Segment {
+  name: string;
+  detail?: string[];
+  size?: number;
+  notes?: string[];
+  mark?: string;
+}
+
+interface Props {
+  label: string;
+  title?: string;
+  segments: Segment[];
+  note?: string;
+}
+
+const { label, title, segments, note } = Astro.props;
+const cols = segments.map((s) => `minmax(${(s.name.length * 0.6 + 1.5).toFixed(2)}rem, ${s.size ?? 1}fr)`).join(" ");
+---
+
+<figure class="mg-seg not-content" aria-label={label}>
+  {
+    title && (
+      <p class="title">
+        <Inline text={title} />
+      </p>
+    )
+  }
+  <ol style={`--cols: ${cols}`}>
+    {
+      segments.map((s) => (
+        <li class:list={{ marked: s.mark }}>
+          <div class="box">
+            <p class="name">{s.name}</p>
+            {s.detail?.map((line) => (
+              <p class="detail">
+                <Inline text={line} />
+              </p>
+            ))}
+          </div>
+          <div class="notes">
+            {s.mark && (
+              <p class="mark">
+                ↑ <Inline text={s.mark} />
+              </p>
+            )}
+            {s.notes?.map((line) => (
+              <p>
+                <Inline text={line} />
+              </p>
+            ))}
+          </div>
+        </li>
+      ))
+    }
+  </ol>
+  {
+    note && (
+      <figcaption>
+        <Inline text={note} />
+      </figcaption>
+    )
+  }
+</figure>
+
+<style>
+  .mg-seg {
+    margin: 1.5rem 0;
+    max-width: 72ch;
+    color: var(--mg-ink);
+    font-size: 0.9375rem;
+    line-height: 1.45;
+  }
+  .mg-seg p {
+    margin: 0;
+  }
+  .mg-seg :global(code) {
+    font-size: 0.875em;
+    padding: 0.0625rem 0.25rem;
+    background: var(--mg-code-bg);
+    border-radius: 3px;
+    overflow-wrap: anywhere;
+  }
+  .title {
+    font-family: var(--sl-font-mono);
+    color: var(--mg-mute);
+    margin-bottom: 0.5rem;
+  }
+  ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: var(--cols);
+    grid-template-rows: auto auto;
+    border-left: 1px solid var(--mg-rule);
+  }
+  li {
+    display: grid;
+    grid-row: span 2;
+    grid-template-rows: subgrid;
+    min-width: 0;
+  }
+  .box {
+    border: 1px solid var(--mg-rule);
+    border-left: 0;
+    background: var(--mg-bg-sub);
+    padding: 0.5rem 0.625rem;
+  }
+  li.marked .box {
+    border-right: 2px solid var(--mg-ink);
+  }
+  .name {
+    font-family: var(--sl-font-mono);
+    font-weight: 500;
+  }
+  .detail {
+    color: var(--mg-mute);
+    font-size: 0.875rem;
+  }
+  .notes {
+    padding: 0.5rem 0.625rem 0 0.625rem;
+    color: var(--mg-mute);
+    font-size: 0.875rem;
+  }
+  .notes p + p {
+    margin-top: 0.25rem;
+  }
+  li.marked .notes {
+    text-align: right;
+  }
+  .mark {
+    color: var(--mg-ink);
+    font-weight: 500;
+  }
+  figcaption {
+    margin-top: 0.75rem;
+    color: var(--mg-mute);
+    font-size: 0.875rem;
+  }
+  @media (max-width: 50rem) {
+    ol {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: none;
+      border-left: 0;
+    }
+    li {
+      grid-row: auto;
+      grid-template-rows: none;
+    }
+    .box {
+      border-left: 1px solid var(--mg-rule);
+      border-top: 0;
+    }
+    li:first-child .box {
+      border-top: 1px solid var(--mg-rule);
+    }
+    li.marked .box {
+      border-right: 1px solid var(--mg-rule);
+      border-bottom: 2px solid var(--mg-ink);
+    }
+    .notes {
+      padding: 0.375rem 0 0.625rem 0.625rem;
+    }
+    .notes:empty {
+      display: none;
+    }
+    li.marked .notes {
+      text-align: left;
+    }
+  }
+</style>

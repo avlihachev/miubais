@@ -1,0 +1,40 @@
+exercise: m3-trace-lab
+module: m3
+title: Trace lab
+package: trace_lab
+stages:
+  - id: "01-spans-from-messages"
+    title: OpenTelemetry spans from a recorded message stream
+    tests: tests/test_01_spans_from_messages.py
+    lesson: m3/01-traces-and-spans-for-agents
+  - id: "02-cost-from-spans"
+    title: Cost per task from spans
+    tests: tests/test_02_cost_from_spans.py
+    lesson: m3/04-cost-per-task
+  - id: "03-budget-guard"
+    title: A budget guard that stops the run
+    tests: tests/test_03_budget_guard.py
+    lesson: m3/04-cost-per-task
+  - id: "04-otlp-export"
+    title: OTLP export to Langfuse
+    tests: tests/test_04_otlp_export.py
+    lesson: m3/03-langfuse-self-hosted
+  - id: "05-model-router"
+    title: Model router with fallback and per-route stats
+    tests: tests/test_05_model_router.py
+    lesson: m3/05-routing-and-fallback
+  - id: "06-top-costly"
+    title: Top costly tasks with cache-hit ratios
+    tests: tests/test_06_top_costly.py
+    lesson: m3/04-cost-per-task
+  - id: "07-cost-review"
+    title: Cost review of the five costliest tickets (judgment stage)
+    tests: tests/test_07_cost_review.py
+    lesson: m3/04-cost-per-task
+  - id: "08-live-traced-ticket"
+    title: "Live: one traced ticket in a local Langfuse"
+    tests: tests/test_08_live_traced_ticket.py
+    lesson: m3/03-langfuse-self-hosted
+    live: true
+    requires: [docker, claude-auth]
+    timeout: 1200

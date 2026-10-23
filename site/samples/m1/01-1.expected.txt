@@ -1,0 +1,6 @@
+allow Write    src/tinyshop/pricing.py        src/tinyshop/pricing.py resolves under an allowed root
+DENY  Write    src/../tests/test_pricing.py   src/../tests/test_pricing.py resolves outside every allowed root
+DENY  Bash     rm -rf build                   command matches banned pattern rm\s+-rf
+DENY  Bash     pytest -q > /tmp/report.txt    output redirected to /tmp/report.txt, outside every allowed root
+allow Read     /etc/hosts                     reads have no side effects
+DENY  WebFetch https://example.com            WebFetch is not on the known list, denied by default

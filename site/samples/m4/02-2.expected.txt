@@ -1,0 +1,6 @@
+['cache', 'hits', 'cache hits', 'cac', 'ach', 'che']
+dims 256, nonzero 8, norm 1.000
++0.373  Cache hits are billed at a tenth of the input price.
++0.099  Cached prefixes make repeated requests cheaper.
++0.153  Reading from the prompt cache costs less than fresh input.
++0.309  The tell-tale heart beat louder under the floor.

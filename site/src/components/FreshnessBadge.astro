@@ -1,0 +1,26 @@
+---
+import { badgeFor, type LessonEntry, type LessonFrontmatter } from "../lib/freshness";
+
+interface Props {
+  lesson: LessonFrontmatter;
+  report?: LessonEntry;
+}
+
+const badge = badgeFor(Astro.props.lesson, Astro.props.report);
+---
+
+<p class="freshness-badge" data-color={badge.color}>{badge.label}</p>
+{
+  badge.drifts.length > 0 && (
+    <details class="freshness-drifts">
+      <summary>{badge.drifts.length} pins drifted</summary>
+      <ul>
+        {badge.drifts.map(([key, drift]) => (
+          <li>
+            <code>{key}</code>: {drift.pinned} → {drift.latest} ({drift.level})
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
+}

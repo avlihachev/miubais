@@ -1,0 +1,21 @@
+{"n": 1, "role": "user", "text": "Ticket 021-missing-field:\n\n# 021: Missing template fields render as empty text\n\nrender(\"Hi {name}\", {}) returns \"Hi \" and the letter goes out blank. A missing field should raise KeyError naming the field. Failing test: tests/test_render.py::test_missing_field_raises. Acceptance: `pytest --runxfail tests/test_render.py::test_missing_field_raises -q` passes, the rest of the suite still passes, and no test file is edited."}
+{"n": 2, "role": "assistant", "text": "Where is render defined?", "message_id": "msg_0957320954b439a9e998b75c"}
+{"n": 3, "role": "assistant", "tool": "Grep", "input": {"pattern": "def render", "path": "src", "-n": true}, "message_id": "msg_0957320954b439a9e998b75c"}
+{"n": 4, "role": "tool", "tool": "Grep", "output": "src/mailmerge/render.py:4:def render(template: str, fields: dict[str, str]) -> str:"}
+{"n": 5, "role": "assistant", "tool": "Read", "input": {"file_path": "src/mailmerge/render.py"}, "message_id": "msg_fc81c024251a5624c20833cc"}
+{"n": 6, "role": "tool", "tool": "Read", "output": "from collections import defaultdict\n\n\ndef render(template: str, fields: dict[str, str]) -> str:\n    return template.format_map(defaultdict(str, fields))\n\n\ndef render_all(template: str, rows: list[dict[str, str]]) -> list[str]:\n    return [render(template, row) for row in rows]"}
+{"n": 7, "role": "assistant", "tool": "Read", "input": {"file_path": "tests/test_render.py"}, "message_id": "msg_24874bb6ff45723d8688bde1"}
+{"n": 8, "role": "tool", "tool": "Read", "output": "import pytest\nfrom mailmerge.render import render\n\n\ndef test_render_fills_fields():\n    assert render(\"Hi {name}\", {\"name\": \"Ann\"}) == \"Hi Ann\"\n\n\n@pytest.mark.xfail(strict=True, reason=\"ticket 021\")\ndef test_missing_field_raises():\n    with pytest.raises(KeyError, match=\"name\"):\n        render(\"Hi {name}\", {})"}
+{"n": 9, "role": "assistant", "text": "defaultdict(str) turns every missing field into an empty string. format_map on the plain dict raises KeyError with the field name.", "message_id": "msg_1bf88eacf62c2bfe4e3b2916"}
+{"n": 10, "role": "assistant", "tool": "Edit", "input": {"file_path": "src/mailmerge/render.py", "old_string": "    return template.format_map(defaultdict(str, fields))", "new_string": "    return template.format_map(fields)"}, "message_id": "msg_1bf88eacf62c2bfe4e3b2916"}
+{"n": 11, "role": "tool", "tool": "Edit", "output": "The file src/mailmerge/render.py has been updated."}
+{"n": 12, "role": "user", "text": "This session is being continued from a previous conversation that ran out of context. So far: edits in src/mailmerge/render.py for a mailmerge ticket. Continue from where you left off."}
+{"n": 13, "role": "assistant", "text": "Resuming: src/mailmerge/render.py already has the fix. Verifying now.", "message_id": "msg_f0ae7876918e9809f3e6731f"}
+{"n": 14, "role": "assistant", "tool": "Bash", "input": {"command": "python -m pytest --runxfail -q tests/test_render.py::test_missing_field_raises"}, "message_id": "msg_f0ae7876918e9809f3e6731f"}
+{"n": 15, "role": "tool", "tool": "Bash", "output": ".                                                                        [100%]\n1 passed in 0.05s"}
+{"n": 16, "role": "assistant", "tool": "Bash", "input": {"command": "python -m pytest -q --deselect tests/test_render.py::test_missing_field_raises"}, "message_id": "msg_9da3e0c99e726e01c4c2813d"}
+{"n": 17, "role": "tool", "tool": "Bash", "output": "...x.............                                                        [100%]\n16 passed, 1 deselected, 1 xfailed in 0.04s"}
+{"n": 18, "role": "assistant", "tool": "Bash", "input": {"command": "git diff --stat"}, "message_id": "msg_040b06b234f75ce87f0e76f4"}
+{"n": 19, "role": "tool", "tool": "Bash", "output": " src/mailmerge/render.py | 4 ++--\n 1 file changed, 2 insertions(+), 2 deletions(-)"}
+{"n": 20, "role": "assistant", "text": "Fixed ticket 021: render() raises KeyError naming a missing field. The ticket test passes with --runxfail and the rest of the suite is green.", "message_id": "msg_96427d755de432031bdd4c19"}
+{"n": 21, "role": "result", "subtype": "success", "cost_usd": 0.18, "num_turns": 8}

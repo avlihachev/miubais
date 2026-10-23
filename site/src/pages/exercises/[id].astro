@@ -1,0 +1,66 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import { getCollection, render } from "astro:content";
+import ExercisePanel from "../../components/ExercisePanel.astro";
+
+export async function getStaticPaths() {
+  const exercises = await getCollection("exercises");
+  const readmes = await getCollection("exerciseReadmes");
+  const docs = await getCollection("docs");
+  const lessonTitle = (id: string) => {
+    const doc = docs.find((d) => d.id === id);
+    if (!doc) throw new Error(`stage lesson ${id} is not a lesson`);
+    return doc.data.title;
+  };
+  return exercises.map((entry) => ({
+    params: { id: entry.data.exercise },
+    props: {
+      exercise: entry.data,
+      readme: readmes.find((r) => r.id.startsWith(`${entry.data.exercise}/`)),
+      lessons: Object.fromEntries(
+        entry.data.stages.flatMap((s) => (s.lesson ? [[s.lesson, lessonTitle(s.lesson)]] : [])),
+      ),
+    },
+  }));
+}
+
+const { exercise, readme, lessons } = Astro.props;
+const { Content, headings: readmeHeadings } = readme ? await render(readme) : { Content: null, headings: [] };
+const headings = [
+  ...readmeHeadings,
+  { depth: 2, slug: "requirements-by-stage", text: "Requirements by stage" },
+  { depth: 2, slug: "check-your-work", text: "Check your work" },
+];
+---
+
+<StarlightPage frontmatter={{ title: exercise.title, freshness: "skip" }} headings={headings}>
+  {Content && <div class="exercise-readme"><Content /></div>}
+  <h2 id="requirements-by-stage">Requirements by stage</h2>
+  <table>
+    <thead>
+      <tr><th>Stage</th><th>Title</th><th>Read first</th><th>Live</th><th>Requires</th></tr>
+    </thead>
+    <tbody>
+      {
+        exercise.stages.map((s) => (
+          <tr>
+            <td><code>{s.id}</code></td>
+            <td>{s.title}</td>
+            <td>{s.lesson ? <a href={`/${s.lesson}/`}>{lessons[s.lesson]}</a> : "-"}</td>
+            <td>{s.live ? "yes" : "no"}</td>
+            <td>{s.requires.join(", ") || "-"}</td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+  <h2 id="check-your-work">Check your work</h2>
+  <ExercisePanel exercise={exercise.exercise} stages={exercise.stages.map(({ id, title }) => ({ id, title }))} />
+</StarlightPage>
+
+<style>
+  /* the page title already names the exercise, so the README's own h1 would repeat it */
+  .exercise-readme > :global(h1:first-child) {
+    display: none;
+  }
+</style>

@@ -1,0 +1,243 @@
+# golden set for the m4 retrieval lab: 48 hand-written queries over fixtures/corpus.
+# relevance = a chunk of doc_id contains anchor (case-insensitive, whitespace-normalised).
+queries:
+- id: q01
+  query: Why is reading the input fast on a GPU while writing the reply is slow?
+  doc_id: m0-01-tokens-prefill-decode
+  anchor: Prefill is compute-bound. All N prompt tokens go through each weight matrix together
+  kind: conceptual
+- id: q02
+  query: What does stop_reason model_context_window_exceeded mean?
+  doc_id: m0-01-tokens-prefill-decode
+  anchor: '`refusal` and `model_context_window_exceeded`; the last one means the response filled the context window'
+  kind: lexical
+- id: q03
+  query: How much KV cache memory does one token take for Llama 3 70B in bf16?
+  doc_id: m0-02-kv-cache-and-batching
+  anchor: 2 x 80 x 8 x 128 x 2 = 327,680 bytes, 320 KiB per token
+  kind: factual
+- id: q04
+  query: Why do servers handling many simultaneous users avoid reserving one big contiguous region per conversation?
+  doc_id: m0-02-kv-cache-and-batching
+  anchor: PagedAttention (Kwon et al., SOSP 2023) stores the KV cache in fixed-size blocks
+  kind: conceptual
+- id: q05
+  query: How do I add or withdraw tools mid-conversation with the inline-tools-2026-09-15 beta?
+  doc_id: m0-03-prompt-caching
+  anchor: the `inline-tools-2026-09-15` beta lets you add or withdraw tools with `tool_addition` / `tool_removal` blocks
+  kind: lexical
+- id: q06
+  query: How do I set output_config.task_budget with the task-budgets-2026-03-13 beta?
+  doc_id: m0-04-cost-levers
+  anchor: 'Task budgets fill that gap: with the `task-budgets-2026-03-13` beta you set'
+  kind: lexical
+- id: q07
+  query: How should I compare which LLM vendor is more economical for my workload?
+  doc_id: m0-04-cost-levers
+  anchor: Price candidates on cost per solved task over your hardest tenth of tasks
+  kind: conceptual
+- id: q08
+  query: Why can't I rely on the system message alone to stop the agent doing dangerous things?
+  doc_id: m1-01-harness-is-loop-plus-policy
+  anchor: 'So the slogan for this module is: prompts suggest, hooks enforce.'
+  kind: conceptual
+- id: q09
+  query: What is the default timeout for an SDK hook callback?
+  doc_id: m1-02-hooks-permissions-and-modes
+  anchor: The default is 600 seconds for most events and 30 for `UserPromptSubmit`.
+  kind: factual
+- id: q10
+  query: How many tokens does a subagent usually hand back to its parent?
+  doc_id: m1-03-subagents
+  anchor: returns only a condensed, distilled summary of its work (often 1,000-2,000 tokens)
+  kind: factual
+- id: q11
+  query: Invalid session ID. Must be a valid UUID. when passing session_id
+  doc_id: m1-04-durable-sessions-and-idempotency
+  anchor: the CLI printed `Invalid session ID. Must be a valid UUID.` and the SDK raised a `ProcessError`
+  kind: lexical
+- id: q12
+  query: How can a side-effecting action that talks to another service be protected from happening twice after a crash and restart?
+  doc_id: m1-04-durable-sessions-and-idempotency
+  anchor: Only the connection whose insert took effect runs the effect, then records the outcome.
+  kind: conceptual
+- id: q13
+  query: How many traces should I review during error analysis?
+  doc_id: m2-01-error-analysis-first
+  anchor: The FAQ recommends reviewing "at least 100 traces" and continuing while you are still learning.
+  kind: factual
+- id: q14
+  query: Why should I hold off drafting grading guidelines until I've gone through some agent runs?
+  doc_id: m2-01-error-analysis-first
+  anchor: a rubric written up front "can get in the way"
+  kind: conceptual
+- id: q15
+  query: What TPR, TNR and kappa does a judge need before the lab trusts it?
+  doc_id: m2-02-judges-and-agreement
+  anchor: a judge is trusted when TPR ≥ 0.85, TNR ≥ 0.85 and kappa ≥ 0.6
+  kind: factual
+- id: q16
+  query: 'Why does the judge schema put minLength: 20 on the evidence field?'
+  doc_id: m2-02-judges-and-agreement
+  anchor: 'The `evidence` field with `minLength: 20` is not decoration.'
+  kind: lexical
+- id: q17
+  query: Why should two attempts at the same work item never end up on opposite sides of the evaluation partition?
+  doc_id: m2-03-datasets-and-contamination
+  anchor: Split by group first, then stratify within groups.
+  kind: conceptual
+- id: q18
+  query: What is the chance of passing all three trials with a 75% per-trial success rate?
+  doc_id: m2-04-agent-evals
+  anchor: the probability of passing all three is (0.75)³ ≈ 42%
+  kind: factual
+- id: q19
+  query: What does harnesskit.traces.to_trace_lines produce from a message stream?
+  doc_id: m2-04-agent-evals
+  anchor: '`harnesskit.traces.to_trace_lines(messages)` turns an Agent SDK message stream into numbered `TraceLine` records'
+  kind: lexical
+- id: q20
+  query: Why shouldn't a function call's timing record be a child of the model reply that asked for it?
+  doc_id: m3-01-traces-and-spans-for-agents
+  anchor: Chat and tool spans are siblings under the root, not nested inside each other.
+  kind: conceptual
+- id: q21
+  query: Should I emit gen_ai.usage.cache_creation.input_tokens or the newer cache_write name?
+  doc_id: m3-02-genai-semantic-conventions
+  anchor: The course uses the installed constant, `gen_ai.usage.cache_creation.input_tokens`.
+  kind: lexical
+- id: q22
+  query: What hardware does Langfuse recommend for a self-hosted Docker Compose VM?
+  doc_id: m3-03-langfuse-self-hosted
+  anchor: It recommends "at least 4 cores and 16 GiB of memory" for the VM
+  kind: factual
+- id: q23
+  query: How is cache_hit_ratio computed from cache_read and cache_write?
+  doc_id: m3-04-cost-per-task
+  anchor: Stage 02 defines `cache_hit_ratio = cache_read / (input + cache_read + cache_write)`
+  kind: lexical
+- id: q24
+  query: Is it better to rely on the LLM resisting malicious text, or to restrict what the process can physically reach?
+  doc_id: m5-01-threat-model-for-agent-factories
+  anchor: '"Design for containment at the environment layer first, then steer behavior at the model layer."'
+  kind: conceptual
+- id: q25
+  query: How many attacks in the injection corpus does the reference detector flag?
+  doc_id: m5-02-indirect-injection-and-provenance
+  anchor: the exercise's reference detector flags 88 of the 90 attacks (TPR 0.978)
+  kind: factual
+- id: q26
+  query: What does CLAUDE_CODE_SUBPROCESS_ENV_SCRUB do?
+  doc_id: m5-03-permissions-sandboxing-and-secrets
+  anchor: 'Claude Code has `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`: "Set to `1` to strip credentials'
+  kind: lexical
+- id: q27
+  query: What status does an MCP server return for a token issued for a different resource?
+  doc_id: m5-04-remote-mcp-and-oauth
+  anchor: 'A token for another resource is invalid here, whatever scopes it carries: 401.'
+  kind: factual
+- id: q28
+  query: How close must a finding's line be to a label's lines to count as a match?
+  doc_id: m7-01-review-as-a-measurable-pipeline
+  anchor: the line lies within the label's range widened by three lines on each side
+  kind: factual
+- id: q29
+  query: Why is recycling a wire identifier in a schema contract harmful even though CI stays green?
+  doc_id: m7-02-conventions-of-a-go-ts-proto-migrations-repo
+  anchor: an old client, a queued message or a stored payload is decoded with the new meaning
+  kind: conceptual
+- id: q30
+  query: Does strict_mcp_config make the reviewer ignore mcp_servers from project .mcp.json?
+  doc_id: m7-03-reading-a-pr-with-a-read-only-agent
+  anchor: '"use only the servers passed in `mcp_servers` and ignore project `.mcp.json`'
+  kind: lexical
+- id: q31
+  query: What separates rejecting a pull request outright from parking it until someone signs off?
+  doc_id: m7-04-blocker-ranking-from-repository-signals
+  anchor: '`hold` means the change may be fine and is waiting on a person'
+  kind: conceptual
+- id: q32
+  query: How do I prove a prompt cache hit with cache_read_input_tokens?
+  doc_id: m0-07-interview-angle
+  anchor: Read `usage.cache_read_input_tokens` and `cache_creation_input_tokens` on the second request, and log the hit ratio per call.
+  kind: lexical
+- id: q33
+  query: When several hooks return different decisions for one tool call, which decision wins?
+  doc_id: m1-07-interview-angle
+  anchor: 'the most restrictive decision wins: `deny` over `defer` over `ask` over `allow`'
+  kind: factual
+- id: q34
+  query: What agreement thresholds does the lab require before it trusts an LLM judge?
+  doc_id: m2-07-interview-angle
+  anchor: trusts a judge at TPR and TNR of at least 0.85 and kappa of at least 0.6
+  kind: factual
+- id: q35
+  query: If an unattended coding agent feels sluggish, would optimising the functions it invokes make a real difference?
+  doc_id: m3-07-interview-angle
+  anchor: 91.4% of wall time is in chat spans, so the levers are fewer turns, smaller prompts and a warm cache
+  kind: conceptual
+- id: q36
+  query: When does a remote MCP server answer 403 insufficient_scope?
+  doc_id: m5-07-interview-angle
+  anchor: a valid token without the scope gets 403 `insufficient_scope` with the full required scope
+  kind: lexical
+- id: q37
+  query: How much money did Della have to buy Jim a present?
+  doc_id: gift-of-the-magi
+  anchor: One dollar and eighty-seven cents. That was all. And sixty cents of it
+  kind: factual
+- id: q38
+  query: How much was Della paid for her hair?
+  doc_id: gift-of-the-magi
+  anchor: “Twenty dollars,” said Madame, lifting the mass with a practised hand.
+  kind: factual
+- id: q39
+  query: How did the husband pay for his wife's hair ornaments?
+  doc_id: gift-of-the-magi
+  anchor: I sold the watch to get the money to buy your combs.
+  kind: conceptual
+- id: q40
+  query: Mme. Sofronie hair goods shop sign
+  doc_id: gift-of-the-magi
+  anchor: Mme. Sofronie. Hair Goods of All Kinds.
+  kind: lexical
+- id: q41
+  query: What is the narrator's husband's profession?
+  doc_id: yellow-wallpaper
+  anchor: John is a physician, and perhaps—(I would not say it to a living soul,
+  kind: factual
+- id: q42
+  query: Why does the narrator conceal her journal whenever her spouse approaches?
+  doc_id: yellow-wallpaper
+  anchor: There comes John, and I must put this away,—he hates to have me write a word.
+  kind: conceptual
+- id: q43
+  query: phosphates or phosphites and tonics prescribed to the narrator
+  doc_id: yellow-wallpaper
+  anchor: So I take phosphates or phosphites—whichever it is, and tonics, and
+  kind: lexical
+- id: q44
+  query: What does she believe is moving within the decorations on the wall?
+  doc_id: yellow-wallpaper
+  anchor: And it is like a woman stooping down and creeping about behind that pattern.
+  kind: conceptual
+- id: q45
+  query: How many nights did the narrator spy on the old man before acting?
+  doc_id: tell-tale-heart
+  anchor: did for seven long nights—every night just at midnight
+  kind: factual
+- id: q46
+  query: What made the narrator decide to kill the elderly man he claimed to love?
+  doc_id: tell-tale-heart
+  anchor: He had the eye of a vulture—a pale blue eye, with a film over it.
+  kind: conceptual
+- id: q47
+  query: hearkening to the death watches in the wall
+  doc_id: tell-tale-heart
+  anchor: hearkening to the death watches in the wall.
+  kind: lexical
+- id: q48
+  query: three planks from the flooring of the chamber
+  doc_id: tell-tale-heart
+  anchor: I then took up three planks from the flooring of the chamber, and
+  kind: lexical

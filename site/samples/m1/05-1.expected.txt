@@ -1,0 +1,8 @@
+preset+append: system_prompt=['append', 'preset', 'type'] setting_sources=['project'] skills=['review-diff']
+  project loads CLAUDE.md and .claude/rules/*.md up the tree, project skills and commands
+custom: system_prompt=str setting_sources=[] skills=None
+  nothing from the filesystem: no CLAUDE.md, rules, skills or commands
+default: system_prompt=NoneType setting_sources=None skills=None
+  user    loads ~/.claude/CLAUDE.md, ~/.claude/rules/*.md, user skills and commands
+  project loads CLAUDE.md and .claude/rules/*.md up the tree, project skills and commands
+  local   loads CLAUDE.local.md, .claude/settings.local.json

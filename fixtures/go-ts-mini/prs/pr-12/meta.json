@@ -1,0 +1,10 @@
+{
+  "title": "Use camelCase for createdAt in job responses",
+  "author": "bruno",
+  "created_at": "2026-10-16",
+  "approvals": [
+    "chen",
+    "emil"
+  ],
+  "description": "The new dashboard expects camelCase; created_at becomes createdAt in job JSON, the web client follows and the changelog records it."
+}

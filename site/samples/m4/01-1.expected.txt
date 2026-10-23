@@ -1,0 +1,4 @@
+32 documents, 501,311 characters, 76,477 words
+largest document: 31,497 characters
+estimate at 4 characters per token: 125,327 tokens
+under 200,000 tokens: True

@@ -1,0 +1,5 @@
+model claude-opus-5-5, cap 0.05 USD per answer, floor 4.0
+3 answers (conceptual, factual, lexical), refused 0
+cite a relevant chunk: 3/3
+citations 6, invalid 0, uncited sentences 1
+cost 0.0986 USD of 0.2 allowed

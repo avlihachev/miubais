@@ -1,0 +1,5 @@
+total=1840 written=1800 read=0 uncached=40 hit_ratio=0.00 cost=$0.009260
+total=1842 written=0 read=1800 uncached=42 hit_ratio=0.98 cost=$0.000628
+prefix identical across turns, tool order shuffled: True
+prefix identical with a timestamp in system: False
+mid-conversation system message leaves the prefix unedited: True

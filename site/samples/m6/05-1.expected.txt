@@ -1,0 +1,4 @@
+first in   ttft   400.0 ms  tps  25.0  latency   620.0 ms
+queued     ttft  2100.0 ms  tps  25.0  latency  2320.0 ms
+one token  ttft   380.0 ms  tps  None  latency   400.0 ms
+throughput 4.74 output tokens/s over 2.32 s

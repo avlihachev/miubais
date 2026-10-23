@@ -1,0 +1,28 @@
+top_five:
+  - 007-duplicate-sku-merge
+  - 004-coupon-expiry-timezone
+  - 006-tax-after-discount
+  - 002-negative-quantity
+  - 003-out-of-stock-message
+causes:
+  001-discount-rounding: retries
+  002-negative-quantity: no-cache
+  003-out-of-stock-message: expensive-model
+  004-coupon-expiry-timezone: big-context
+  005-free-shipping-threshold: loop
+  006-tax-after-discount: no-cache
+  007-duplicate-sku-merge: big-context
+  008-price-format-thousands: expensive-model
+  009-partial-refund-quantity: loop
+  010-reservation-release: retries
+cache_hit_ratio:
+  001-discount-rounding: 0.8494437292431612
+  002-negative-quantity: 0.0
+  003-out-of-stock-message: 0.8061712990667295
+  004-coupon-expiry-timezone: 0.7714254360047947
+  005-free-shipping-threshold: 0.8820037155033444
+  006-tax-after-discount: 0.0
+  007-duplicate-sku-merge: 0.823525575989582
+  008-price-format-thousands: 0.7800866605917468
+  009-partial-refund-quantity: 0.8752526705783319
+  010-reservation-release: 0.8536839272202841

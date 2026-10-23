@@ -1,0 +1,93 @@
+---
+import { loadCourse } from "../../lib/course";
+
+const { capstone } = await loadCourse();
+---
+
+<section class="mg-check not-content" aria-label="Capstone reviewer record">
+  <div class="hd"><i aria-hidden="true"></i>{capstone.title}<span class="m">{capstone.source}</span></div>
+  <div class="bd">
+    {
+      capstone.cells.map((c) => (
+        <div class="cell">
+          <b>{c.value}</b>
+          {c.label}
+        </div>
+      ))
+    }
+  </div>
+  <div class="ft">
+    This is what you ship at the end: a read-only agent that reads a PR against the repo's rules, runs the tests on the
+    patched tree, ranks the blockers, and refuses to be talked out of it. The numbers are from one committed run, not a
+    benchmark.
+  </div>
+</section>
+
+<style>
+  .mg-check {
+    border: 1px solid var(--mg-rule);
+    border-radius: 6px;
+    margin: 1.875rem 0 2.25rem;
+    overflow: hidden;
+    color: var(--mg-ink);
+  }
+  .hd {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.625rem;
+    padding: 0.625rem 0.875rem;
+    background: var(--mg-bg-sub);
+    border-bottom: 1px solid var(--mg-rule);
+    font-size: 0.875rem;
+  }
+  .hd i {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--mg-pass);
+  }
+  .m {
+    margin-left: auto;
+    font: 0.75rem var(--__sl-font-mono);
+    color: var(--mg-mute);
+  }
+  .bd {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .cell {
+    padding: 0.875rem;
+    border-right: 1px solid var(--mg-rule);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--mg-mute);
+  }
+  .cell:last-child {
+    border-right: 0;
+  }
+  .cell b {
+    display: block;
+    margin-bottom: 2px;
+    font: 500 1.375rem var(--__sl-font-mono);
+    color: var(--mg-ink);
+  }
+  .ft {
+    padding: 0.5rem 0.875rem;
+    border-top: 1px solid var(--mg-rule);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--mg-mute);
+  }
+  @media (max-width: 760px) {
+    .bd {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .cell:nth-child(2) {
+      border-right: 0;
+    }
+    .cell:nth-child(-n + 2) {
+      border-bottom: 1px solid var(--mg-rule);
+    }
+  }
+</style>

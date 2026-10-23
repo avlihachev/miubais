@@ -1,0 +1,4 @@
+outcome: TP=27 FN=3 TN=17 FP=3 TPR=0.90 TNR=0.85
+judge:   n=50 po=0.88 pe=0.36 kappa=0.81
+trusted: True
+lazy:    n=50 po=0.90 pe=0.90 kappa=0.00

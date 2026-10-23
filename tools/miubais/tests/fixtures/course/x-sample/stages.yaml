@@ -1,0 +1,14 @@
+exercise: x-sample
+module: x
+title: Sample exercise
+package: sample_lab
+stages:
+  - id: "01-add"
+    title: add returns the sum
+    tests: tests/test_01_add.py
+    lesson: x/01-adding
+  - id: "02-live"
+    title: live stage placeholder
+    tests: tests/test_02_live.py
+    live: true
+    requires: [claude-auth]

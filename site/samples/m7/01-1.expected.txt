@@ -1,0 +1,9 @@
+rule: file, line window, category
+  billing/charge.go:46 error-swallowed -> label 40-44
+  billing/keys.go:7 secret-in-code -> label 7-7
+  precision 0.40 (2/5)  recall 0.67 (2/3)  blocker recall 1.00
+rule: file only
+  billing/charge.go:46 error-swallowed -> label 40-44
+  billing/keys.go:7 secret-in-code -> label 7-7
+  ui/cart.ts:30 ts-any -> label 12-12
+  precision 0.60 (3/5)  recall 1.00 (3/3)  blocker recall 1.00

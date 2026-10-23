@@ -1,0 +1,69 @@
+diff --git a/CHANGELOG.json b/CHANGELOG.json
+index 4768851..74b719b 100644
+--- a/CHANGELOG.json
++++ b/CHANGELOG.json
+@@ -1,4 +1,11 @@
+ [
++  {
++    "version": "0.5.0",
++    "date": "2026-10-16",
++    "entries": [
++      "Create jobs from the web client"
++    ]
++  },
+   {
+     "version": "0.4.0",
+     "date": "2026-10-10",
+diff --git a/web/src/api.ts b/web/src/api.ts
+index 28d168b..9a4b410 100644
+--- a/web/src/api.ts
++++ b/web/src/api.ts
+@@ -1,5 +1,7 @@
+ import type { JobStatus } from "./status.ts";
+ 
++const API_TOKEN = "job_live_7c41e09a2b5d4f38a6e1c90b3d72f5e8";
++
+ export interface Job {
+   id: string;
+   reference: string;
+@@ -12,6 +14,14 @@ export interface Job {
+   created_at: string;
+ }
+ 
++export interface NewJob {
++  reference: string;
++  source_lang: string;
++  target_lang: string;
++  hours_estimate: number;
++  translator?: string;
++}
++
+ export interface ApiErrorBody {
+   error: { code: string; message: string };
+ }
+@@ -44,14 +54,23 @@ export class JobsClient {
+     return this.request<Job>("GET", `/jobs/${encodeURIComponent(id)}`);
+   }
+ 
++  async create(input: NewJob): Promise<Job> {
++    return this.request<Job>("POST", "/jobs", input);
++  }
++
+   async cancel(id: string): Promise<Job> {
+     return this.request<Job>("POST", `/jobs/${encodeURIComponent(id)}/cancel`);
+   }
+ 
+-  private async request<T>(method: string, path: string): Promise<T> {
++  private async request<T>(method: string, path: string, payload?: unknown): Promise<T> {
+     const response = await fetch(`${this.baseUrl}${path}`, {
+       method,
+-      headers: { Accept: "application/json" },
++      headers: {
++        Accept: "application/json",
++        Authorization: `Bearer ${API_TOKEN}`,
++        "Content-Type": "application/json",
++      },
++      body: payload === undefined ? undefined : JSON.stringify(payload),
+     });
+     const body: unknown = await response.json();
+     if (!response.ok) {

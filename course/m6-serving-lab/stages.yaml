@@ -1,0 +1,45 @@
+exercise: m6-serving-lab
+module: m6
+title: Serving lab
+package: serving_lab
+stages:
+  - id: "01-load-generator"
+    title: A load generator measuring TTFT and TPS against a fake OpenAI-compatible server
+    tests: tests/test_01_load_generator.py
+    lesson: m6/05-measuring-ttft-tps-and-cost
+  - id: "02-local-model"
+    title: "Live: the load generator against a small local model in Ollama"
+    tests: tests/test_02_local_model.py
+    lesson: m6/03-running-locally
+    live: true
+    requires: [ollama]
+    timeout: 600
+  - id: "03-k8s-manifests"
+    title: Kubernetes manifests for a vLLM stack, rendered and validated offline
+    tests: tests/test_03_k8s_manifests.py
+    lesson: m6/04-kubernetes-for-inference
+    requires: [helm, kubeconform]
+  - id: "04-autoscaling-policy"
+    title: A KEDA-style autoscaling policy simulated on a replayed metrics series
+    tests: tests/test_04_autoscaling_policy.py
+    lesson: m6/04-kubernetes-for-inference
+    requires: [kubeconform]
+  - id: "05-gateway-routing"
+    title: A gateway routing between a local model and the API with per-route cost
+    tests: tests/test_05_gateway_routing.py
+    lesson: m6/03-running-locally
+  - id: "06-benchmark-report"
+    title: A cloud-GPU benchmark report with a cost-per-million-tokens model
+    tests: tests/test_06_benchmark_report.py
+    lesson: m6/05-measuring-ttft-tps-and-cost
+  - id: "07-serving-plan"
+    title: A serving plan for a stated scenario (judgment stage)
+    tests: tests/test_07_serving_plan.py
+    lesson: m6/05-measuring-ttft-tps-and-cost
+  - id: "08-live-gateway"
+    title: "Live: the gateway over a local model and the Claude API"
+    tests: tests/test_08_live_gateway.py
+    lesson: m6/03-running-locally
+    live: true
+    requires: [ollama, claude-auth]
+    timeout: 600

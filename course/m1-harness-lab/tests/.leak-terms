@@ -1,0 +1,42 @@
+ call has no file path
+>>?\s*([^\s;&|<>]+)
+ALTER TABLE sessions ADD COLUMN cost_usd REAL
+CREATE TABLE IF NOT EXISTS ops (key TEXT PRIMARY KEY, result TEXT, at TEXT)
+CREATE TABLE IF NOT EXISTS sessions (ticket_id TEXT PRIMARY KEY, session_id TEXT, status TEXT, updated_at TEXT, cost_usd REAL)
+Check the fix with `python -m pytest --runxfail -q <the test the ticket names>` and stop once it passes.
+DELETE FROM sessions WHERE ticket_id = ?
+FINDING_KEYS
+Finish with one short paragraph: what was wrong and what you changed.
+INSERT OR IGNORE INTO ops VALUES (?, ?, ?)
+INSERT OR REPLACE INTO sessions (ticket_id, session_id, status, updated_at, cost_usd) VALUES (?, ?, ?, ?, ?)
+Only edit files under src/; never edit tests/ or tickets/.
+PRAGMA table_info(sessions)
+READ_TOOLS
+REDIRECT
+REVIEWER_PROMPT
+Read the ticket, find the cause under src/, and make the smallest change that fixes it.
+Reviews a diff for correctness and policy violations
+SCHEMA
+SELECT cost_usd FROM sessions WHERE ticket_id = ?
+SELECT result FROM ops WHERE key = ?
+SELECT session_id FROM sessions WHERE ticket_id = ?
+SEVERITIES
+SYSTEM_PROMPT
+You fix one ticket in the repository in your working directory.
+You review a diff for correctness bugs and policy violations. Read the changed files, never modify anything. Reply only with the verdict JSON: approve (boolean) and findings, each with file, line, severity (critical, important or minor) and note.
+_check_command
+_collect
+_connect
+_deny
+_exact_keys
+_failed_before_output
+_invalid
+_last_text
+_stopped_by
+_stored
+_turns
+_within_roots
+columns
+command matches blocked pattern 
+previous_total
+ticket_options

@@ -1,0 +1,39 @@
+---
+import { loadCourse } from "../../lib/course";
+
+const course = await loadCourse();
+---
+
+<div class="mg-status not-content">
+  <span><b>miubais</b></span>
+  <span>{course.merged} of {course.modules.length} modules built</span>
+  {course.verifiedOn && <span>sources verified {course.verifiedOn}</span>}
+  {course.sdkPin && <span>claude-agent-sdk {course.sdkPin}</span>}
+  <span class="end"><a href="/progress/">progress</a> · <a href="/freshness/">freshness</a></span>
+</div>
+
+<style>
+  .mg-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.5rem;
+    padding: 0 0 0.75rem;
+    border-bottom: 1px solid var(--mg-rule);
+    font: 0.8125rem/1.5 var(--__sl-font-mono);
+    color: var(--mg-mute);
+  }
+  b {
+    color: var(--mg-ink);
+    font-weight: 500;
+  }
+  a {
+    color: var(--mg-link);
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+  .end {
+    margin-left: auto;
+  }
+</style>

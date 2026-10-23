@@ -1,0 +1,18 @@
+model: claude-sonnet-5-5
+conversations_per_day: 40000
+days: 30
+turns_per_conversation: 5
+system_prompt_tokens: 3000
+tools_tokens: 1000
+avg_user_turn_tokens: 80
+avg_assistant_turn_tokens: 220
+latency_slo_seconds: 6
+gap_distribution:
+  under_5m: 0.55
+  5m_to_60m: 0.30
+  over_60m: 0.15
+summary_job:
+  input: prefix plus the full transcript
+  output_tokens: 400
+  deadline_hours: 24
+usage_log: usage_log.jsonl

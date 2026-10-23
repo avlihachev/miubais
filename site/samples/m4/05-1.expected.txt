@@ -1,0 +1,8 @@
+recall@5    0.667
+precision@5 0.400
+RR          0.333
+DCG@5       0.8869
+IDCG over min(k, relevant)=3: 2.1309 -> nDCG 0.4162
+IDCG over k=5 (wrong):        2.9485 -> 0.3008
+one relevant item at rank 1, k=10: 1.0
+  with the ideal over k=10: 0.2201

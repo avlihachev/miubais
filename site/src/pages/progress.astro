@@ -1,0 +1,34 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import { getCollection } from "astro:content";
+
+const exercises = (await getCollection("exercises")).map((e) => e.data);
+---
+
+<StarlightPage frontmatter={{ title: "Progress", freshness: "skip" }}>
+  <miubais-progress-table>
+    <p class="api-note">Progress lives on your machine: <code>uv run miubais check &lt;exercise&gt;</code> prints the stage table. On localhost with <code>uv run miubais serve</code> running, this page fills in.</p>
+    <table>
+      <thead>
+        <tr><th>Exercise</th><th>Stage</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        {
+          exercises.flatMap((e) =>
+            e.stages.map((s) => (
+              <tr>
+                <td><a href={`/exercises/${e.exercise}/`}>{e.exercise}</a></td>
+                <td><code>{s.id}</code></td>
+                <td data-exercise={e.exercise} data-stage={s.id}>·</td>
+              </tr>
+            )),
+          )
+        }
+      </tbody>
+    </table>
+  </miubais-progress-table>
+</StarlightPage>
+
+<script>
+  import "../components/exercise-panel";
+</script>

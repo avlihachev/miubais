@@ -1,0 +1,5 @@
+a7dad53fd2a3fa6d 82a090a09128ca9f
+intact: (True, None, 'ok')
+edited line 3: (False, 3, 'sha256 does not match the line')
+deleted line 3: (False, 3, 'prev_sha256 does not match the line before')
+cut after line 2: (True, None, 'ok') <- needs the recorded head to catch

@@ -1,0 +1,26 @@
+---
+import Default from "@astrojs/starlight/components/PageTitle.astro";
+import FreshnessBadge from "./FreshnessBadge.astro";
+import StatusLine from "./landing/StatusLine.astro";
+import { reportEntry } from "../lib/freshness";
+
+const { entry, id } = Astro.locals.starlightRoute;
+const { freshness, verified_on, executed, pins, description } = entry.data;
+const lesson = freshness !== "skip" && verified_on && executed ? { verified_on, executed, pins } : null;
+const landing = id === "";
+---
+
+{
+  landing ? (
+    <div class="mg-head">
+      <StatusLine />
+      <Default {...Astro.props} />
+      <p class="sub">{description}</p>
+    </div>
+  ) : (
+    <>
+      <Default {...Astro.props} />
+      {lesson && <FreshnessBadge lesson={lesson} report={reportEntry(entry.id)} />}
+    </>
+  )
+}

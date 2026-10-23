@@ -1,0 +1,1 @@
+{"run_id": "baseline-fake-judge", "at": "2026-10-17T09:00:00+00:00", "pass_rate": 0.445, "counts": {"loop": 19, "scope-creep": 19, "silent-skip": 17, "policy-denied-retry": 22, "tool-result-poisoning": 18, "budget-blowout": 22, "context-loss": 18, "success": 65}, "n": 200}

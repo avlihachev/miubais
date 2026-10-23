@@ -1,0 +1,53 @@
+exercise: m4-retrieval-lab
+module: m4
+title: Retrieval lab
+package: retrieval_lab
+stages:
+  - id: "01-chunker"
+    title: Chunk Markdown and plain text by headings and paragraphs
+    tests: tests/test_01_chunker.py
+    lesson: m4/02-chunking-and-embeddings
+  - id: "02-embed-and-store"
+    title: A hashing embedder and a pgvector table with full text
+    tests: tests/test_02_embed_and_store.py
+    lesson: m4/02-chunking-and-embeddings
+    requires: [docker]
+  - id: "03-hybrid-retrieval"
+    title: Vector and full-text search fused with reciprocal rank fusion
+    tests: tests/test_03_hybrid_retrieval.py
+    lesson: m4/03-hybrid-search
+    requires: [docker]
+  - id: "04-reranker"
+    title: A lexical reranker and MMR over the fused candidates
+    tests: tests/test_04_reranker.py
+    lesson: m4/04-reranking-and-mmr
+    requires: [docker]
+  - id: "05-metrics"
+    title: Recall, precision, MRR and nDCG on the golden set
+    tests: tests/test_05_metrics.py
+    lesson: m4/05-retrieval-metrics-and-golden-sets
+    requires: [docker]
+  - id: "06-answer-assembly"
+    title: A cited answer prompt and a faithfulness check
+    tests: tests/test_06_answer_assembly.py
+    lesson: m4/06-citations-faithfulness-and-agentic-retrieval
+    requires: [docker]
+  - id: "07-retrieval-error-analysis"
+    title: Retrieval error analysis of the failed golden queries (judgment stage)
+    tests: tests/test_07_retrieval_error_analysis.py
+    lesson: m4/05-retrieval-metrics-and-golden-sets
+    requires: [docker]
+  - id: "08-live-local-models"
+    title: "Live: local embeddings and a cross-encoder on the golden set"
+    tests: tests/test_08_live_local_models.py
+    lesson: m4/02-chunking-and-embeddings
+    live: true
+    requires: [docker, embed-model]
+    timeout: 1200
+  - id: "09-live-answer"
+    title: "Live: cited answers to three golden queries"
+    tests: tests/test_09_live_answer.py
+    lesson: m4/06-citations-faithfulness-and-agentic-retrieval
+    live: true
+    requires: [docker, claude-auth]
+    timeout: 900

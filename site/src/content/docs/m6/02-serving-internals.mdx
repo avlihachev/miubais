@@ -1,0 +1,235 @@
+---
+title: Serving internals
+description: What one vLLM replica does on every step, how the engine arguments split GPU memory between weights and KV cache and what each one trades, quantisation of weights and of the KV cache, prefix caching and KV offloading tiers, disaggregated prefill and decode in llm-d, and the metrics that tell you which knob to turn.
+module: m6
+order: 2
+verified_on: 2026-10-22
+executed: local
+pins:
+  "pypi:claude-agent-sdk": "0.2.168"
+  "github:vllm-project/vllm": "v0.31.0"
+  "github:llm-d/llm-d": "v0.10.0"
+  "model:default": claude-opus-5-5
+sources:
+  - url: https://docs.vllm.ai/en/stable/serving/online_serving/
+    title: vLLM, Online Serving
+    checked: 2026-10-22
+  - url: https://docs.vllm.ai/en/stable/configuration/engine_args/
+    title: vLLM, Engine Arguments
+    checked: 2026-10-22
+  - url: https://docs.vllm.ai/en/stable/configuration/optimization/
+    title: vLLM, Optimization and Tuning
+    checked: 2026-10-22
+  - url: https://docs.vllm.ai/en/stable/design/prefix_caching/
+    title: vLLM design, Automatic Prefix Caching
+    checked: 2026-10-22
+  - url: https://docs.vllm.ai/en/stable/design/metrics/
+    title: vLLM design, Metrics
+    checked: 2026-10-22
+  - url: https://docs.vllm.ai/en/stable/features/quantization/
+    title: vLLM, Quantization
+    checked: 2026-10-22
+  - url: https://docs.vllm.ai/en/stable/features/quantization/quantized_kvcache/
+    title: vLLM, Quantized KV Cache
+    checked: 2026-10-22
+  - url: https://huggingface.co/Qwen/Qwen3.5-27B
+    title: Qwen3.5-27B model card
+    checked: 2026-10-22
+  - url: https://llm-d.ai/docs/0.10/architecture
+    title: llm-d v0.10, Architecture
+    checked: 2026-10-22
+  - url: https://llm-d.ai/docs/0.10/architecture/advanced/disaggregation
+    title: llm-d v0.10, Disaggregated Serving
+    checked: 2026-10-22
+  - url: https://llm-d.ai/docs/0.10/well-lit-paths/foundations/pd-disaggregation
+    title: llm-d v0.10, P/D Disaggregation
+    checked: 2026-10-22
+  - url: https://llm-d.ai/docs/0.10/well-lit-paths/foundations/tiered-prefix-cache
+    title: llm-d v0.10, Tiered Prefix Cache
+    checked: 2026-10-22
+---
+
+import Pipeline from "../../../components/diagrams/Pipeline.astro";
+import Segments from "../../../components/diagrams/Segments.astro";
+
+**Prerequisites:** [M0 lesson 02](../../m0/02-kv-cache-and-batching/), which derives the KV cache size per token and explains continuous batching, paged attention and disaggregation from the API user's side. This lesson takes the operator's side of the same machinery.
+
+## Why this matters for the factory
+
+M0 explained why an API's latency and prices behave as they do. Once the factory runs its own model, you own the behaviour. A vLLM replica that was started with the defaults will serve requests, and it may also refuse to start for a context length it cannot hold, preempt requests under load, or leave half of its prefix cache unused because the router spreads a conversation over three replicas. Each of those has an engine argument or a deployment choice behind it.
+
+The exercise has no GPU, so stage 01's fake server stands in for vLLM, with vLLM's metric names and a fixed number of slots. Stage 03's manifests set `--max-model-len` because an unset one is a capacity bug, and stage 04 scales on `vllm:num_requests_waiting`. This lesson explains what sits behind those names.
+
+## Core idea
+
+A vLLM replica is a loop. On every iteration the scheduler picks which requests run, gives each a share of a token budget, runs one forward pass over the whole batch, and streams the new tokens out. The KV cache lives in a fixed pool of blocks allocated when the server starts, and everything the scheduler does is bounded by how many free blocks are left.
+
+<Pipeline
+  label="One vLLM engine iteration"
+  from="requests arrive in the waiting queue"
+  to="new tokens stream to clients; finished requests return their blocks to the pool"
+  note="If the pool runs out mid-generation, a running request is preempted back to the waiting queue and recomputes its prefill later."
+  steps={[
+    { name: "admit", does: ["move waiting requests to running while `--max-num-seqs` and the free KV blocks allow"] },
+    { name: "budget", does: ["spend `--max-num-batched-tokens`: one token per running decode, then chunks of new prompts"] },
+    { name: "reuse", does: ["skip prefill for prompt blocks whose prefix hash is already cached"] },
+    { name: "forward", does: ["one pass over the batch; new keys and values are written into blocks"], loop: "every iteration until each request stops" },
+  ]}
+/>
+
+Startup decides the pool. `--gpu-memory-utilization` caps the memory vLLM may use, the weights take their share (set by the checkpoint and `--quantization`), and the rest, minus activations and other overheads, becomes KV blocks whose size per token depends on the model and on `--kv-cache-dtype`. `--max-model-len` must fit inside that pool. Every argument below moves one of those boundaries.
+
+## Mechanics
+
+### What `vllm serve` exposes
+
+`vllm serve <model>` starts an OpenAI-compatible server: `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings` and `/v1/models`, plus `/health` ("Health check") and `/metrics` ("Prometheus-compatible metrics HTTP endpoint"), per the Online Serving page. The load generator from stage 01, the readiness probe in stage 03 and the KEDA trigger in stage 04 talk to these three: the chat endpoint, `/health` and `/metrics`.
+
+### The memory budget, worked for one model
+
+Take Qwen3.5-27B, the course's single-GPU reference model, on one 80 GB H100. Its card gives the inputs: 27B parameters, 64 layers in the layout "16 × (3 × (Gated DeltaNet → FFN) → 1 × (Gated Attention → FFN))", and for the gated attention layers "24 for Q and 4 for KV" heads with "Head Dimension: 256". Only those 16 attention layers keep keys and values per token. The other 48 are Gated DeltaNet, linear-attention layers that keep a fixed-size state per sequence, which the arithmetic below leaves out. With M0's formula, `2 × 16 layers × 4 KV heads × 256 × 2 bytes` is 64 KiB per token in bf16, a fifth of the 320 KiB that Llama 3 70B needs in M0's example.
+
+The sample computes the pool for four combinations of weight format and KV cache dtype. `--gpu-memory-utilization` is at its default of 0.92, and 5 GB for activations, CUDA graphs and the vision encoder is an assumption; on real hardware the overhead is whatever the engine measures, and the result is arithmetic, not a measured run. INT4 ignores the extra bits that quantisation scales add.
+
+Sample: `site/samples/m6/02-1.py`.
+
+```python
+from serving_lab_lessons.engine_budget import budget
+
+qwen35_27b = {"params": 27e9, "attention_layers": 16, "kv_heads": 4, "head_dim": 256}
+h100 = {"gpu_gb": 80, "utilization": 0.92, "overhead_gb": 5}
+contexts = [262_144, 32_768, 8_192]
+
+print("weights KV    weights GB  KV GB  KiB/token   KV tokens  sequences at 256K / 32K / 8K")
+for weights, bits, kv_dtype, kv_bytes in [
+    ("bf16", 16, "bf16", 2),
+    ("fp8", 8, "bf16", 2),
+    ("fp8", 8, "fp8", 1),
+    ("int4", 4, "fp8", 1),
+]:
+    b = budget(**h100, **qwen35_27b, bits_per_weight=bits, kv_bytes_per_value=kv_bytes)
+    fits = " / ".join(str(b.sequences(c)) for c in contexts)
+    print(
+        f"{weights:<7} {kv_dtype:<5} {b.weights_gb:>10.1f} {b.kv_gb:>6.1f}"
+        f" {b.kv_kib_per_token:>10.0f} {b.kv_tokens:>11,}  {fits}"
+    )
+```
+
+Output, run on 2026-10-22:
+
+```
+weights KV    weights GB  KV GB  KiB/token   KV tokens  sequences at 256K / 32K / 8K
+bf16    bf16        54.0   14.6         64     222,778  0 / 6 / 27
+fp8     bf16        27.0   41.6         64     634,765  2 / 19 / 77
+fp8     fp8         27.0   41.6         32   1,269,531  4 / 38 / 154
+int4    fp8         13.5   55.1         32   1,681,518  6 / 51 / 205
+```
+
+The second row as a picture of the GPU:
+
+<Segments
+  label="One 80 GB H100 serving Qwen3.5-27B with FP8 weights and a bf16 KV cache"
+  title="80 GB H100, --gpu-memory-utilization 0.92"
+  segments={[
+    { name: "weights", detail: ["27.0 GB, FP8"], size: 27 },
+    { name: "overhead", detail: ["5 GB, assumed"], size: 5 },
+    { name: "KV blocks", detail: ["41.6 GB, 634,765 tokens"], size: 41.6, notes: ["shared by every running request"] },
+    { name: "unused", detail: ["6.4 GB"], size: 6.4 },
+  ]}
+/>
+
+In bf16 the weights leave room for 222,778 tokens of cache, less than one sequence at the model's native 262,144: such a deployment needs a smaller `--max-model-len` or a second GPU. The engine arguments page documents `-1` or `auto` for `--max-model-len` as "Automatically choose the maximum model length that fits in GPU memory", which is the same constraint seen from the other side. FP8 weights free 27 GB, nearly tripling the cache. And the KV dtype, at a fixed weight format, doubles the cache again. The last column is what matters for planning: at 8K tokens per conversation, the same GPU holds 27 to 205 concurrent sequences depending on two flags.
+
+### The engine arguments and what each trades
+
+All descriptions are from the vLLM engine arguments page; the trade-offs follow from the budget above and from the optimisation guide.
+
+| Argument | Sets | Trades |
+| --- | --- | --- |
+| `--max-model-len` | "Model context length (prompt and output)" | Longer requests admitted against a pool that must hold at least one of them; each long request takes that much of the pool |
+| `--gpu-memory-utilization` | "The fraction of GPU memory to be used for the model executor", default 0.92, "a per-instance limit" | Higher means more KV blocks and less headroom for anything else on the GPU |
+| `--quantization` | "Method used to quantize the weights" | Memory and bandwidth against accuracy, which you measure |
+| `--kv-cache-dtype` | "Data type for kv cache storage", `auto` or `fp8` among others | Twice the cached tokens in fp8, at an accuracy risk |
+| `--max-num-seqs` | "Maximum number of sequences to be processed in a single iteration" | More concurrency per step against more KV pressure and preemption |
+| `--max-num-batched-tokens` | "Maximum number of tokens that can be processed in a single iteration" | TTFT against inter-token latency (below) |
+| `--tensor-parallel-size` | "Number of tensor parallel groups", default 1 | Weights split over GPUs, more KV room per GPU, synchronisation cost |
+| `--enable-prefix-caching` | "Whether to enable prefix caching" | Little; the design page calls it "almost a free lunch" |
+
+The optimisation guide states what `--max-num-batched-tokens` trades: "Smaller values (e.g., 2048) achieve better ITL because there are fewer prefills slowing down decodes. Higher values achieve better time to first token (TTFT) as you can process more prefill tokens in a batch." An interactive assistant and a batch summariser want different values on the same model.
+
+When the pool runs out, the guide describes what happens: "vLLM can preempt requests to free up KV cache space for other requests. Preempted requests are recomputed when sufficient KV cache space becomes available again", with a warning in the log, and its remedies are to increase `gpu_memory_utilization`, decrease `max_num_seqs` or `max_num_batched_tokens`, or increase `tensor_parallel_size`, which "shards model weights across GPUs, allowing each GPU to have more memory available for KV cache. However, increasing this value may cause excessive synchronization overhead."
+
+### Quantisation choices
+
+The quantisation page opens with the trade: "Quantization trades off model precision for smaller memory footprint, allowing large models to be run on a wider range of devices." Three practical points for picking a format:
+
+- **The checkpoint decides most of it.** If the publisher ships a quantised model, vLLM reads its `quantization_config`; `--quantization` is "Method used to quantize the weights" and, when unset, vLLM first checks that config before assuming unquantised weights. gpt-oss arrives in MXFP4 from its publisher ([lesson 01](../01-open-weight-landscape-and-licences/)); for others, the page points to LLM Compressor, "a library for optimizing models for deployment with vLLM that supports FP8, INT8, INT4, and other quantization formats".
+- **The GPU narrows the choice.** The page's hardware table marks LLM Compressor FP8 (W8A8) as supported on Ada, Hopper and AMD GPUs and not on Ampere, while AWQ and GPTQ run on Ampere. An FP8 plan written for H100s does not move unchanged to A100s.
+- **Weights and cache are separate decisions.** `--kv-cache-dtype fp8` quantises the cache whatever the weights are. The quantized KV cache page says it "can significantly reduce its memory footprint. This optimization enables you to store more tokens in memory, leading to improved throughput and support for longer context windows." Without calibration, "All quantization scales are set to 1.0"; calibrated scales from a dataset are the page's recommended path "for maximum accuracy".
+
+In every case, run your eval set (M2's harness) on the quantised deployment before it takes traffic.
+
+### Prefix caching and where cached blocks live
+
+vLLM's prefix cache hashes "each kv-cache block by the tokens in the block and the tokens in the prefix before the block", so a block is reused only when everything before it matches exactly. [M0 lesson 03](../../m0/03-prompt-caching/) drew the prompt-layout consequence for the Claude API; it holds for your own server too. A factory's agents are its best case: every turn of a ticket resends the same system prompt, tool definitions and growing history.
+
+Two limits appear at scale. First, the cache is per replica: if the router sends turn 5 of a conversation to a different replica from turn 4, the prefix is recomputed. llm-d's Endpoint Picker "scores and selects model server pods based on real-time metrics, KV-cache affinity, and configured policies" for this reason; [lesson 04](../04-kubernetes-for-inference/) covers the routing layer. Second, GPU memory is small. llm-d's tiered prefix cache page states the problem for agents: "Given the multi-turn nature of agentic workloads, prefix-cache re-use is a critical factor for high performance inference", and once blocks are evicted, "Follow on requests then must recompute the prefill". Its answer is to offload evicted blocks to slower tiers: CPU RAM, local disk, shared storage, or a peer's CPU memory. On CPU RAM it says that "Loading from CPU RAM is faster than recomputing prefill in most cases" and that CPU offloading "is low overhead and introduces ~no additional complexity". In vLLM the switch is `--kv-offloading-size`, the "Size of the KV cache offloading buffer in GiB", off by default, with `--kv-offloading-backend` choosing `native` or `lmcache`.
+
+### Disaggregated prefill and decode in llm-d
+
+M0 explained why prefill and decode want different hardware. llm-d makes it a deployment option: "The llm-d Router orchestrates this flow by selecting both a prefill and a decode endpoint and coordinating the KV-cache transfer between them." It is not on by default, and its own pages say when to use it: "For long context workloads (10:1 ISL:OSL) and medium-to-large models", meaning input sequences about ten times longer than outputs. Per request, a decider asks "given how much of the prompt is cached on D, should this request run disagg?" and splits only when the uncached suffix is large.
+
+The cost is the network. "Disaggregated Serving requires high performance (RDMA) interconnects between nodes for efficient KV transfer. Without RDMA, NIXL falls back to TCP for transfer which is not efficient and should only be used for testing and development." On a cluster without InfiniBand, RoCE or EFA, start with chunked prefill and a separate pool for long-context work.
+
+### The metrics that point to a knob
+
+The metrics design page lists the names; the right-hand column is the first thing to check when each one moves.
+
+| Metric | What it reads | First knob |
+| --- | --- | --- |
+| `vllm:num_requests_waiting` | Requests queued, not yet running | More replicas (stage 04), or a higher `--max-num-seqs` if KV usage allows |
+| `vllm:kv_cache_usage_perc` | "Fraction of used KV cache blocks (0–1)" | Near 1: fp8 KV, smaller `--max-model-len`, tensor parallelism |
+| `vllm:time_to_first_token_seconds` | TTFT histogram | Higher `--max-num-batched-tokens`, prefix cache hits, disaggregation |
+| `vllm:inter_token_latency_seconds` | "time between consecutive streamed outputs" | Lower `--max-num-batched-tokens` |
+| `vllm:prefix_cache_hits` / `vllm:prefix_cache_queries` | Hit rate (counters, exposed with `_total`) | Prompt layout, cache-aware routing, an offload tier |
+
+Stage 01's fake server publishes several of these names with the `_count`, `_sum` and `_total` suffixes Prometheus adds, so code written against it uses the names a real vLLM exposes.
+
+## Common pitfalls
+
+- **Taking the card's context length as the serving limit.** 262,144 tokens is what the model supports. What one replica supports is set by the KV pool, which in bf16 on one H100 is smaller than one such sequence. Set `--max-model-len` to what the workload needs.
+- **Leaving `--max-model-len` unset.** It is then "automatically derived from the model config", 262,144 tokens for Qwen3.5-27B, which the bf16 budget above cannot hold. Stage 03's checklist fails a deployment without it.
+- **Raising `--max-num-seqs` to fix a queue.** If the KV pool is full, more admitted sequences means more preemption. Look at `vllm:kv_cache_usage_perc` first.
+- **Quantising without an eval.** FP8 weights and an uncalibrated fp8 cache each change outputs. Measure on the workload's eval set before and after.
+- **Running several replicas behind a round-robin Service.** Each replica's prefix cache sees a fraction of every conversation. Route by cache affinity.
+- **Disaggregating over TCP.** llm-d's pages restrict that to testing. Without RDMA, keep prefill and decode together.
+
+## What interviewers ask
+
+**Your vLLM server fails to start with a long context model on one GPU. What do you change?**
+The KV pool cannot hold one sequence of `--max-model-len`. Lower `--max-model-len` to what the workload needs, use FP8 or INT4 weights to free memory, set `--kv-cache-dtype fp8`, or add a GPU with `--tensor-parallel-size 2`. Check the arithmetic: weights, overhead, then KV bytes per token times the context.
+
+**What does `--max-num-batched-tokens` trade?**
+The per-iteration token budget shared by decodes and prefill chunks. Small values protect inter-token latency because fewer prefill tokens run alongside decodes; large values lower TTFT because prompts are processed in fewer steps.
+
+**How do you serve a multi-turn agent workload efficiently on several replicas?**
+Turn on prefix caching, keep prompts append-only so the hash chain survives, route each conversation to the replica that holds its blocks (a KV-cache-aware router such as llm-d's Endpoint Picker), and offload evicted blocks to CPU RAM so later turns reload instead of recomputing.
+
+**When would you disaggregate prefill and decode?**
+For long-input, short-output traffic on medium-to-large models, where long prefills stall decodes, and only with an RDMA network for the KV transfer. Otherwise chunked prefill and a separate long-context pool are cheaper.
+
+## Sources
+
+- [vLLM, Online Serving](https://docs.vllm.ai/en/stable/serving/online_serving/), the endpoint list, checked 2026-10-22
+- [vLLM, Engine Arguments](https://docs.vllm.ai/en/stable/configuration/engine_args/), the arguments in the table and `--kv-offloading-size`, checked 2026-10-22
+- [vLLM, Optimization and Tuning](https://docs.vllm.ai/en/stable/configuration/optimization/), Preemption and Performance Tuning with Chunked Prefill, checked 2026-10-22
+- [vLLM design, Automatic Prefix Caching](https://docs.vllm.ai/en/stable/design/prefix_caching/), checked 2026-10-22
+- [vLLM design, Metrics](https://docs.vllm.ai/en/stable/design/metrics/), checked 2026-10-22
+- [vLLM, Quantization](https://docs.vllm.ai/en/stable/features/quantization/), the opening and the supported-hardware table, checked 2026-10-22
+- [vLLM, Quantized KV Cache](https://docs.vllm.ai/en/stable/features/quantization/quantized_kvcache/), checked 2026-10-22
+- [Qwen3.5-27B model card](https://huggingface.co/Qwen/Qwen3.5-27B), Model Overview, checked 2026-10-22
+- [llm-d v0.10, Architecture](https://llm-d.ai/docs/0.10/architecture), checked 2026-10-22
+- [llm-d v0.10, Disaggregated Serving](https://llm-d.ai/docs/0.10/architecture/advanced/disaggregation), checked 2026-10-22
+- [llm-d v0.10, P/D Disaggregation](https://llm-d.ai/docs/0.10/well-lit-paths/foundations/pd-disaggregation), checked 2026-10-22
+- [llm-d v0.10, Tiered Prefix Cache](https://llm-d.ai/docs/0.10/well-lit-paths/foundations/tiered-prefix-cache), checked 2026-10-22
+- Course code (repository files, not web sources): stages 01, 03 and 04 in `course/m6-serving-lab/README.md`, the lesson helper `course/m6-serving-lab/lesson_support/src/serving_lab_lessons/engine_budget.py`

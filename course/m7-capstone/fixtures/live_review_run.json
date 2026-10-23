@@ -1,0 +1,213 @@
+{
+  "date": "2026-10-23",
+  "stage": "08-live-review",
+  "reviewer": "AgentReviewer",
+  "model": "claude-opus-5-5",
+  "max_budget_usd_per_pr": 0.4,
+  "max_turns": 20,
+  "as_of": "2026-10-17",
+  "prs": [
+    {
+      "pr": "pr-01",
+      "verdict": "merge",
+      "reason": "merge: no blocker, no major finding",
+      "review": "ok",
+      "verify": "pass",
+      "blockers": [],
+      "findings": 1,
+      "cost_usd": 0.0736,
+      "turns": 4,
+      "duration_ms": 15439
+    },
+    {
+      "pr": "pr-02",
+      "verdict": "block",
+      "reason": "block: blocker finding proto-field-reuse at proto/jobs/v1/jobs.proto:13",
+      "review": "ok",
+      "verify": "pass",
+      "blockers": [],
+      "findings": 2,
+      "cost_usd": 0.074,
+      "turns": 3,
+      "duration_ms": 14781
+    },
+    {
+      "pr": "pr-03",
+      "verdict": "block",
+      "reason": "block: blocker finding proto-missing-reserved at proto/jobs/v1/jobs.proto:33",
+      "review": "ok",
+      "verify": "pass",
+      "blockers": [
+        "missing-second-approval"
+      ],
+      "findings": 2,
+      "cost_usd": 0.0467,
+      "turns": 3,
+      "duration_ms": 9330
+    },
+    {
+      "pr": "pr-04",
+      "verdict": "block",
+      "reason": "block: stale-migration (new migration out of sequence: migrations/0004_add_due_at_index.sql (expected 0005))",
+      "review": "ok",
+      "verify": "pass",
+      "blockers": [
+        "stale-migration"
+      ],
+      "findings": 1,
+      "cost_usd": 0.072,
+      "turns": 5,
+      "duration_ms": 11452
+    },
+    {
+      "pr": "pr-05",
+      "verdict": "block",
+      "reason": "block: blocker finding migration-edited-applied at migrations/0002_add_due_at.sql:1",
+      "review": "ok",
+      "verify": "pass",
+      "blockers": [],
+      "findings": 1,
+      "cost_usd": 0.0661,
+      "turns": 4,
+      "duration_ms": 15060
+    },
+    {
+      "pr": "pr-06",
+      "verdict": "hold",
+      "reason": "hold: major finding input-unvalidated at internal/api/handlers.go:136",
+      "review": "ok",
+      "verify": "pass",
+      "blockers": [],
+      "findings": 2,
+      "cost_usd": 0.0724,
+      "turns": 4,
+      "duration_ms": 11405
+    },
+    {
+      "pr": "pr-07",
+      "verdict": "block",
+      "reason": "block: verify-failed (node --test failed on the patched tree)",
+      "review": "ok",
+      "verify": "fail",
+      "blockers": [
+        "verify-failed"
+      ],
+      "findings": 4,
+      "cost_usd": 0.0535,
+      "turns": 2,
+      "duration_ms": 11252
+    },
+    {
+      "pr": "pr-08",
+      "verdict": "block",
+      "reason": "block: blocker finding secret-in-code at web/src/api.ts:4",
+      "review": "ok",
+      "verify": "pass",
+      "blockers": [],
+      "findings": 1,
+      "cost_usd": 0.0353,
+      "turns": 2,
+      "duration_ms": 8420
+    },
+    {
+      "pr": "pr-09",
+      "verdict": "block",
+      "reason": "block: verify-failed (go test failed on the patched tree)",
+      "review": "ok",
+      "verify": "fail",
+      "blockers": [
+        "verify-failed"
+      ],
+      "findings": 4,
+      "cost_usd": 0.0953,
+      "turns": 3,
+      "duration_ms": 16761
+    },
+    {
+      "pr": "pr-10",
+      "verdict": "block",
+      "reason": "block: conflict (patch does not apply: internal/api/errors.go)",
+      "review": "skipped",
+      "verify": "conflict",
+      "blockers": [
+        "conflict"
+      ],
+      "findings": 0,
+      "cost_usd": 0.0,
+      "turns": 0,
+      "duration_ms": 27
+    },
+    {
+      "pr": "pr-11",
+      "verdict": "hold",
+      "reason": "hold: unreviewed-age (open 27 days without an approval)",
+      "review": "ok",
+      "verify": "pass",
+      "blockers": [
+        "unreviewed-age"
+      ],
+      "findings": 0,
+      "cost_usd": 0.0569,
+      "turns": 3,
+      "duration_ms": 8828
+    },
+    {
+      "pr": "pr-12",
+      "verdict": "hold",
+      "reason": "hold: major finding api-breaking at CHANGELOG.json:3",
+      "review": "ok",
+      "verify": "pass",
+      "blockers": [],
+      "findings": 1,
+      "cost_usd": 0.0555,
+      "turns": 3,
+      "duration_ms": 7959
+    }
+  ],
+  "metrics": {
+    "overall": {
+      "precision": 0.5789,
+      "recall": 0.9167,
+      "f1": 0.7097,
+      "findings": 19,
+      "labels": 12
+    },
+    "by_severity": {
+      "blocker": {
+        "precision": 0.875,
+        "recall": 0.8,
+        "f1": 0.8358,
+        "findings": 8,
+        "labels": 5
+      },
+      "major": {
+        "precision": 0.5,
+        "recall": 1.0,
+        "f1": 0.6667,
+        "findings": 8,
+        "labels": 5
+      },
+      "minor": {
+        "precision": 0.0,
+        "recall": 1.0,
+        "f1": 0.0,
+        "findings": 3,
+        "labels": 2
+      }
+    },
+    "blocker_recall": 0.8
+  },
+  "verdicts_agreeing_with_key": 10,
+  "totals": {
+    "prs": 12,
+    "cost_usd": 0.7013,
+    "turns": 36,
+    "duration_ms": 130733,
+    "by_verdict": {
+      "merge": 1,
+      "hold": 3,
+      "block": 8
+    },
+    "review_failed": 0
+  }
+}

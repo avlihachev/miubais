@@ -1,0 +1,9 @@
+{
+  "title": "Drop the unused pagination fields from ListJobs",
+  "author": "chen",
+  "created_at": "2026-10-13",
+  "approvals": [
+    "dara"
+  ],
+  "description": "Pagination was never implemented by the service; this removes the page fields from the ListJobs messages and records the breaking change in the changelog."
+}

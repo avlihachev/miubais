@@ -1,0 +1,195 @@
+---
+title: CI gating and tracking
+description: The eval regression gate as a CI check, integer comparison at the threshold, stored baselines and when to refresh them, append-only score history, flake handling without rerunning to green, cost per eval run, and gating on judge trust.
+module: m2
+order: 5
+verified_on: 2026-10-17
+executed: local
+pins:
+  "pypi:claude-agent-sdk": "0.2.168"
+  "model:default": claude-opus-5-5
+sources:
+  - url: https://hamel.dev/blog/posts/evals-faq/
+    title: "AI Evals: Everything You Need to Know (FAQ)"
+    published: 2026-09-18
+    checked: 2026-10-17
+  - url: https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents
+    title: Demystifying evals for AI agents
+    published: 2026-01-09
+    checked: 2026-10-17
+  - url: https://www.anthropic.com/engineering/infrastructure-noise
+    title: Quantifying infrastructure noise in agentic coding evals
+    published: 2026-02-05
+    checked: 2026-10-17
+  - url: https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html
+    title: Flaky Tests at Google and How We Mitigate Them
+    published: 2016-05-27
+    checked: 2026-10-17
+---
+
+import Pipeline from "../../../components/diagrams/Pipeline.astro";
+
+**Prerequisites:** [lesson 02](../02-judges-and-agreement/), which defines the judge trust gate that every number in this lesson's CI check depends on.
+
+## Why this matters for the factory
+
+A factory changes its agent constantly: a prompt edit, a new tool, a model upgrade, a raised turn cap. Each change can make some tickets better and others worse, and nobody reads enough traces after every merge to notice which. Wired into CI, an eval suite becomes a check that blocks the merge, the way a failing unit test does. Husain and Shankar's FAQ puts the division of labour this way: "CI evals protect against known regressions before deployment. Online monitoring find failures in production traffic and estimate how often they occur." Anthropic's evals post places automated evals in the same spot: "Automated evals are especially useful pre-launch and in CI/CD, running on each agent change and model upgrade as the first line of defense against quality problems."
+
+A gate is also a budget decision. Every eval run costs judge calls, sandbox minutes and, for agent evals, full agent runs. A gate that is flaky gets rerun until it passes, which multiplies the cost and removes the protection at the same time.
+
+## Core idea
+
+The gate compares a run with a stored baseline, never with the previous run:
+
+<Pipeline
+  label="An eval gate on a pull request"
+  from="PR"
+  to="merge, or a blocked PR with the reasons printed"
+  steps={[
+    { name: "eval run", does: ["fixed dataset, trusted judge", "→ summary `{pass_rate, counts, n, cost}`"] },
+    { name: "compare", does: ["against the stored, reviewed baseline"] },
+    { name: "gate", does: ["pass-rate drop > 2 pp or any category > +3 blocks the merge"] },
+    { name: "record", does: ["append the summary to the score history, always"] },
+  ]}
+/>
+
+The lab's rule, from `course/m2-evals-lab/README.md`: the gate fails "when the pass rate drops by more than 2.0 percentage points against the baseline, compared after rounding both rates to 4 decimals (whole hundredths of a percentage point, `round(rate * 10000)` ...), or any category's count rises by more than 3 against the baseline. It compares against the stored baseline, never against the previous run."
+
+Two checks, because they catch different things. The pass rate catches a broad slide. The per-category count catches a change that moves failures from one category into another without changing the total, for example a prompt that cures `context-loss` and creates `loop`. Anthropic's post describes this kind of suite: regression evals "should have a nearly 100% pass rate. They protect against backsliding, as a decline in score signals that something is broken and needs to be improved."
+
+Why the stored baseline and not the last run: a gate against the previous run lets the score fall by any amount in small steps. The lab's stage 05 has a test for that, `test_slow_drift_passes_against_each_previous_run_but_fails_against_the_baseline`: three runs, each 1.5 points below the one before, pass against their predecessor and fail against the baseline after 4.5 points.
+
+## Mechanics
+
+### The threshold is an integer comparison
+
+Pass rates are floats, and floats are not decimals. In the lab's own README example, `0.445 - 0.425` is `0.020000000000000018`, so a naive `drop > 0.02` fails a run that dropped exactly two points, which the rule says should pass. This bit the course while it was being built. The first version of the gate compared `round(baseline.pass_rate - run.pass_rate, 9)` with the float `0.02`: it got the README example right, but its tolerance was an undocumented nine-decimal choice that a learner's implementation or another tool in the pipeline would not share. The fix changed the unit instead of the tolerance: both rates become whole ten-thousandths with `round(rate * 10_000)`, the limit becomes the integer 200 (in ten-thousandths, so 2 points), and the README spells out the rule and the float example. The stage tests pin the boundary from both sides: exactly 2 points passes, 2.01 points fails, and a rate 0.00004 below the exact boundary still passes because it rounds to the same ten-thousandth.
+
+The general lesson is to pick the unit of a threshold before writing the comparison, and to compare integers in that unit. When every run uses the same n, the cleanest unit is the trace count itself: at n = 200 one trace is 0.5 points, so "more than 2 points" is "more than 4 traces".
+
+The helper `gate_check` mirrors the lab rule with the same integer arithmetic. The sample runs four invented runs against an invented baseline (four categories shown, the rest omitted). Run it with `PYTHONPATH=course/m2-evals-lab/starter/src:course/m2-evals-lab/lesson_support/src uv run --frozen python site/samples/m2/05-1.py`; nothing calls a model.
+
+Sample: `site/samples/m2/05-1.py`.
+
+```python
+from evals_lab_lessons import gate_check
+
+baseline = {
+    "pass_rate": 0.445,
+    "counts": {"success": 64, "loop": 18, "silent-skip": 17, "context-loss": 21},
+}
+runs = {
+    "steady": {
+        "pass_rate": 0.44,
+        "counts": {"success": 63, "loop": 19, "silent-skip": 17, "context-loss": 21},
+    },
+    "drop": {
+        "pass_rate": 0.42,
+        "counts": {"success": 62, "loop": 19, "silent-skip": 18, "context-loss": 21},
+    },
+    "loop spike": {
+        "pass_rate": 0.44,
+        "counts": {"success": 62, "loop": 22, "silent-skip": 16, "context-loss": 20},
+    },
+    "exactly 2 points": {
+        "pass_rate": 0.425,
+        "counts": {"success": 62, "loop": 19, "silent-skip": 18, "context-loss": 21},
+    },
+}
+for name, run in runs.items():
+    verdict = gate_check(run, baseline)
+    print(f"{name:<17} {'gate ok' if verdict.ok else 'gate failed'}")
+    for reason in verdict.reasons:
+        print(f"  {reason}")
+
+base, last = baseline["pass_rate"], runs["exactly 2 points"]["pass_rate"]
+print()
+print(f"float drop:            {base - last!r}")
+print(f"float drop > 0.02:     {base - last > 0.02}")
+print(f"ten-thousandths drop:  {round(base * 10_000) - round(last * 10_000)} (limit 200)")
+```
+
+Output, run on 2026-10-17:
+
+```
+steady            gate ok
+drop              gate failed
+  pass_rate fell from 0.4450 to 0.4200 (more than 2 percentage points)
+loop spike        gate failed
+  loop rose from 18 to 22 (more than 3)
+exactly 2 points  gate ok
+
+float drop:            0.020000000000000018
+float drop > 0.02:     True
+ten-thousandths drop:  200 (limit 200)
+```
+
+The `steady` run lost half a point and one more `loop`: inside the limits. `drop` lost 2.5 points. `loop spike` kept the pass rate within the limit but added four loops, which the pass rate alone would not have flagged. `exactly 2 points` sits on the boundary and passes, while the float comparison underneath it says otherwise.
+
+### Baselines and when to refresh them
+
+The baseline is a file in the repository (the lab's is `course/m2-evals-lab/fixtures/baseline.json`, the fake judge over all 200 traces), changed by a reviewed commit and never by the CI job. Refresh it in three situations, each with the reason in the commit message:
+
+- **The dataset or labels changed.** Lesson 03's manifest and label hashes identify the dataset; a new hash means the old baseline describes a different set.
+- **The judge changed.** A new judge prompt or model can move scores with no change in the agent. Re-run the trust metrics on the labelled set first; refresh only if the judge is still trusted.
+- **An accepted behaviour change.** A PR that deliberately trades one category for another needs a new baseline, merged with that PR and reviewed like code.
+
+Never refresh because the gate is red and the release is due.
+
+### Score history
+
+The gate answers "is this run worse than the baseline"; the history answers "where have we been going". Keep one record per eval run, appended and never edited. A JSONL file in the eval repository or an artifact store works: one line per run with run id, timestamp, git commit, dataset and labels hashes, judge model and prompt version, n, pass rate, per-category counts, cost and wall time. Corrections are new lines that reference the old run id. The lab's stage 06 does the same job with SQLite: `ScoreHistory.record` is `insert or ignore` on `run_id`, so recording a run twice is harmless, and `trend(n)` returns the last n runs oldest first.
+### Flakes: retry policy and quarantine
+
+Non-determinism is the normal state of agent evals. Anthropic's post: "a task that passed on one eval run might fail on the next", and part of that comes from the environment, not the agent: "Unnecessary shared state between runs (leftover files, cached data, resource exhaustion) can cause correlated failures due to infrastructure flakiness rather than agent performance." Their infrastructure-noise study found that "the gap between the most- and least-resourced setups on Terminal-Bench 2.0 was 6 percentage points (p < 0.01)", that on SWE-bench scores rose with RAM but were "only 1.54 percentage points higher at 5x than 1x", and concluded that "leaderboard differences below 3 percentage points deserve skepticism until the eval configuration is documented and matched." The same post notes that "The observed spread across the moderate range of resource configurations in Terminal-Bench is just below 2 percentage points." A 2-point gate sits inside that range, so pin the environment (resources, image, judge model) and measure your own run-to-run spread by running the unchanged baseline several times before you trust the threshold.
+
+Ordinary software CI has lived with this for years. Google's testing blog reported "a continual rate of about 1.5% of all test runs reporting a "flaky" result", that "Almost 16% of our tests have some level of flakiness associated with them", and that "about 84% of the transitions we observe from pass to fail involve a flaky test". Its mitigations transfer directly, together with its warnings. A test marked flaky reports "a failure only if it fails 3 times in a row", which "reduces false positives, but encourages developers to ignore flakiness". Quarantine "removes the test from the critical path and files a bug", but "could easily mask a real race condition or some other bug".
+
+For an eval gate that becomes four rules:
+
+- **Retry errors, not verdicts.** A judge call that raised (the lab's `JudgeError`, an SDK process error, a rate limit) is retried a bounded number of times and logged. A `fail` judgement is a result; retrying it until it says `pass` is measuring pass@k while reporting pass^1, the trap lesson 04 describes.
+- **Never rerun the whole suite to green.** If the gate is red, the job stays red. A human may re-trigger it, the history keeps both runs, and the second run does not erase the first.
+- **Quarantine with an owner and an expiry.** A task that flips without code changes leaves the gating set for the quarantine set, with a ticket. Quarantined tasks still run and are still recorded; the gate reports how many are quarantined, so the count cannot grow quietly.
+- **Separate infrastructure failures.** Count runs that ended on an environment error separately from agent failures, and fail the job (not the agent) when that count is high.
+
+### Cost per eval run
+
+Cost is a metric of the eval, tracked like pass rate. The FAQ: "Since CI tests are run frequently, the cost of each test has to be carefully considered", and "Favor assertions or other deterministic checks over LLM-as-judge evaluators." Anthropic lists "latency, token usage, cost per task, and error rates" among what "can be tracked on a static bank of tasks." The course's first live judge run, recorded in `course/m2-evals-lab/fixtures/live_judge_run.json`, judged 20 traces with `claude-opus-5-5` for $0.2717 in total; a second run of the same 20 traces (`fixtures/live_judge_run_2.json`) cost $0.4235. At those rates a 200-trace run is roughly $2.70 to $4.20 of judge calls, a figure extrapolated from 20 traces, not measured, and the spread between two identical runs is itself a reason to track cost per run. Put `cost_usd` in every history record and alert when it moves as sharply as the pass rate would; a prompt change that doubles judge cost is a regression too.
+
+### Gating on judge trust
+
+The gate's numbers come from a judge, and a judge can drift. Before the CI job compares anything, it should know that the judge is trusted: the lab's rule from lesson 02 is TPR ≥ 0.85, TNR ≥ 0.85 and kappa ≥ 0.6 on at least 40 labelled traces. When the judge's prompt or model changes, re-run those metrics on the labelled set as part of the same job, and fail closed if they miss: an untrusted judge's pass rate is not evidence either way. For reference, the lab's fake judge scores TPR 0.93, TNR 0.94 and kappa 0.92 against the gold labels on all 200 traces, recomputed by `tools/miubais/tests/test_m2_lesson_numbers.py` in the author's checkout.
+
+## Common pitfalls
+
+- **Comparing against the last run.** Small drops add up with no alarm. Compare against a stored, reviewed baseline.
+- **Float comparison at the threshold.** `0.445 - 0.425 > 0.02` is `True`. Convert to an integer unit and compare integers.
+- **Rerunning until green.** It turns the gate into pass@k and hides real regressions among flakes. Retry errors, record every run, keep red jobs red.
+- **Refreshing the baseline to unblock a release.** The gate then protects nothing. Refresh only for a changed dataset, a re-validated judge or an accepted behaviour change, in a reviewed commit.
+- **A quarantine list nobody reads.** Tasks pile up there and coverage shrinks. Give each quarantined task an owner and expiry, and report the count on every run.
+- **A gate on an unvalidated judge.** A judge prompt edit can move scores more than the agent change under test. Re-check trust metrics whenever the judge changes, and fail closed.
+
+## What interviewers ask
+
+**How would you put an LLM eval into CI?**
+Run a fixed, versioned dataset with a judge that has passed a trust check, summarise to a pass rate and per-category counts, and compare against a stored baseline with explicit thresholds, failing the job with reasons. Record every run in an append-only history with cost, and keep production monitoring as a separate system.
+
+**Why compare against a stored baseline instead of the previous run?**
+Against the previous run, a series of small drops each pass and the total drift is unbounded. A stored baseline changes only through a reviewed commit, so any drift past the threshold is caught.
+
+**How do you handle flaky evals?**
+Pin the environment, measure run-to-run spread on the unchanged baseline, retry only infrastructure errors, and quarantine unstable tasks with an owner while still running and reporting them. Never rerun the suite until it passes, because that reports the best of several tries as a single run.
+
+**What can go wrong at the threshold?**
+Floating-point noise: `0.445 - 0.425` is slightly more than 0.02, so an exact 2-point drop fails a `> 0.02` check. Define the threshold in an integer unit, such as ten-thousandths of the rate or a count of traces, and compare integers.
+
+**What else besides pass rate would you track per eval run?**
+Per-category counts, cost, wall time, the infrastructure error count, the number of quarantined tasks, and the judge's trust metrics when the judge changes. Each can regress while the pass rate stays flat.
+
+## Sources
+
+- [AI Evals: Everything You Need to Know (FAQ)](https://hamel.dev/blog/posts/evals-faq/), Hamel Husain and Shreya Shankar, published 2026-09-18, checked 2026-10-17
+- [Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents), Anthropic, published 2026-01-09, checked 2026-10-17
+- [Quantifying infrastructure noise in agentic coding evals](https://www.anthropic.com/engineering/infrastructure-noise), Anthropic, published 2026-02-05, checked 2026-10-17
+- [Flaky Tests at Google and How We Mitigate Them](https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html), Google Testing Blog, published 2016-05-27, checked 2026-10-17
+- Course code and records (repository files, not web sources): the gate rule in `course/m2-evals-lab/README.md`; `course/m2-evals-lab/tests/test_05_regression_gate.py`; `course/m2-evals-lab/fixtures/baseline.json`, `fixtures/live_judge_run.json` and `fixtures/live_judge_run_2.json`; `tools/miubais/tests/test_m2_lesson_numbers.py`; the lesson helpers in `course/m2-evals-lab/lesson_support/src/evals_lab_lessons/`

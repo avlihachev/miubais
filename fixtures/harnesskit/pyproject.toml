@@ -1,0 +1,17 @@
+[project]
+name = "harnesskit"
+version = "0.1.0"
+description = "Shared harness primitives for Claude Agent SDK runs: policy, hooks, sessions, idempotency, reports."
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "claude-agent-sdk>=0.2.168",
+    "pydantic>=2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/harnesskit"]

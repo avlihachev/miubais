@@ -1,0 +1,4 @@
+apiVersion: v2
+name: prometheus-adapter
+version: 5.3.0
+description: Placeholder for the optional prometheus-adapter dependency, not vendored (see VENDORED.md)

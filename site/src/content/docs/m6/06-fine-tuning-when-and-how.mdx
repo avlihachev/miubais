@@ -1,0 +1,192 @@
+---
+title: Fine-tuning, when and how
+description: When not to fine-tune, argued from the course's M4 retrieval records against Unsloth's claim that fine-tuning replicates RAG; LoRA and QLoRA before full fine-tuning; SFT, DPO and GRPO chosen by the data you have; Unsloth's default hyperparameters; evaluating before and after with M2's regression gate; and serving an adapter from vLLM.
+module: m6
+order: 6
+verified_on: 2026-10-22
+executed: local
+pins:
+  "pypi:claude-agent-sdk": "0.2.168"
+  "github:vllm-project/vllm": "v0.31.0"
+  "github:llm-d/llm-d": "v0.10.0"
+  "github:kubernetes-sigs/gateway-api-inference-extension": "v1.6.2"
+  "github:kedacore/keda": "v2.21.0"
+  "model:default": claude-opus-5-5
+sources:
+  - url: https://unsloth.ai/docs/get-started/fine-tuning-llms-guide
+    title: "Unsloth: Fine-tuning LLMs Guide"
+    checked: 2026-10-22
+  - url: https://arxiv.org/abs/2106.09685
+    title: "LoRA: Low-Rank Adaptation of Large Language Models"
+    published: 2021-06-17
+    checked: 2026-10-22
+  - url: https://arxiv.org/abs/2305.14314
+    title: "QLoRA: Efficient Finetuning of Quantized LLMs"
+    published: 2023-05-23
+    checked: 2026-10-22
+  - url: https://arxiv.org/abs/2305.18290
+    title: "Direct Preference Optimization: Your Language Model is Secretly a Reward Model"
+    published: 2023-05-29
+    checked: 2026-10-22
+  - url: https://arxiv.org/abs/2402.03300
+    title: "DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models"
+    published: 2024-02-05
+    checked: 2026-10-22
+  - url: https://docs.vllm.ai/en/stable/features/lora/
+    title: "vLLM docs: LoRA adapters"
+    published: 2026-10-09
+    checked: 2026-10-22
+---
+
+import Pipeline from "../../../components/diagrams/Pipeline.astro";
+
+**Prerequisites:** [M4 lesson 01](../../m4/01-when-not-to-rag/) and [M4 lesson 06](../../m4/06-citations-faithfulness-and-agentic-retrieval/), whose records this lesson argues from, and [M2 lesson 05](../../m2/05-ci-gating-and-tracking/), whose regression gate decides whether a fine-tune shipped anything.
+
+## Why this matters for the factory
+
+Once the factory serves an open model on its own GPUs, training it on the codebase, the ticket history or the support archive becomes an option. The tools make it look cheap. Unsloth's guide says you can "fine-tune or do RL for free on Colab, Kaggle, or locally with just 3GB VRAM". The training run is the cheap part. The cost is in what comes with it: a dataset someone has to curate, an eval that proves the result is better than the base model with a good prompt, a second artefact to serve and version, and a retraining job every time the base model or the facts change.
+
+This lesson is about deciding whether that cost buys anything, and if it does, running the smallest fine-tune that can show it.
+
+## Core idea
+
+Try the cheap levers first, in order, and measure each with the same eval:
+
+1. A better prompt, with examples.
+2. Retrieval or tools for knowledge the model lacks (M4).
+3. A LoRA or QLoRA adapter for behaviour the prompt cannot fix reliably: an output format, a house style, a classification the model keeps getting wrong, or the work of a large model done by a small one.
+4. Full fine-tuning, rarely, and only after an adapter has shown the direction works.
+
+Each step has to beat the previous one on the eval, or it does not ship:
+
+<Pipeline
+  label="A fine-tune gated by the same eval as the baseline"
+  from="task + M2 eval set with a trusted judge"
+  to="ship the adapter, or keep the prompt"
+  steps={[
+    { name: "baseline", does: ["base model + best prompt (+ retrieval)", "→ stored baseline summary"] },
+    { name: "data", does: ["train / held-out split, no eval items in training"] },
+    { name: "LoRA SFT", does: ["Unsloth defaults, `max_steps = 60` first"] },
+    { name: "eval", does: ["same set, same judge", "gate: pass-rate drop > 2 pp or any category > +3 fails"] },
+    { name: "serve", does: ["vLLM `--enable-lora`, adapter by `model` name"] },
+  ]}
+/>
+
+## Mechanics
+
+### When not to: the course's M4 evidence
+
+Unsloth's guide makes the strong claim in one line: "Fine-tuning can replicate all of RAG's capabilities, but not vice versa." The course built a retrieval pipeline in M4 and recorded what it does. Four of those capabilities are things a fine-tuned model does not have.
+
+**Citations to a source.** M4's live answer run (`course/m4-retrieval-lab/fixtures/live_answer_run.json`) sent three golden queries through retrieval and `claude-opus-5-5`. All three answers cited a chunk that holds the query's anchor, with 6 citations and 0 invalid ones, for $0.0986 in total. Each citation maps back to a chunk id, a document and character offsets, so a reviewer can check the claim against the passage. Knowledge in the weights has no chunk id; a fine-tuned model can be trained to print something that looks like a citation, but there is no retrieved passage for a checker to compare it with.
+
+**Refusing for a reason the program can see.** M4's pipeline refuses before calling the model when fewer than the required chunks clear a reranker support floor; the stage 06 tests pin six off-corpus questions that refuse and 47 of 48 golden queries that clear it. The refusal is a number crossing a threshold. A fine-tuned model has no retrieval score to gate on, so "the corpus does not cover this" becomes a judgement the model makes or does not.
+
+**Changing a fact without training.** In M4's live local-models run, indexing all 653 chunks with a 384-dimension embedder took 49.6 seconds on a laptop (`live_local_models_run.json`, `seconds.index`), and M4's `store.upsert` replaces chunks by id, so a changed runbook means re-embedding that one document. With the fact in the weights, the same change means new training examples, a training run and an eval run before the old answer stops.
+
+**Failing where you can see it.** The same record measures retrieval per query kind: after reranking, recall@10 is 0.938 on lexical and factual queries and 0.438 on conceptual ones. That is a weak spot with a number and a query list attached. A model that absorbed the corpus during training fails on the same questions without telling you which passage it missed.
+
+M4 lesson 01 adds the earlier question: the course's whole corpus is about 138,000 tokens by the four-characters-per-token estimate, small enough to put in a cached prompt. Neither an index nor a fine-tune is the first design for a corpus that fits.
+
+Where the guide is right is behaviour. Its own list of what fine-tuning can do includes customising behaviour ("Adjust the model's tone, personality, or response style") and optimising for tasks ("Improve accuracy and relevance for specific use cases"). The split the course uses: knowledge that changes and must be cited goes in retrieval, stable behaviour that a prompt cannot hold goes in an adapter, and the two combine.
+
+### LoRA and QLoRA first
+
+LoRA "freezes the pre-trained model weights and injects trainable rank decomposition matrices into each layer of the Transformer architecture". For a weight matrix of shape `d_in × d_out`, the adapter is two matrices of rank `r`, so it trains `r × (d_in + d_out)` numbers instead of `d_in × d_out`. On GPT-3 175B the paper reports that LoRA "can reduce the number of trainable parameters by 10,000 times and the GPU memory requirement by 3 times", and, unlike earlier adapter methods, "no additional inference latency". QLoRA keeps the frozen base model in 4-bit and backpropagates through it into the adapters, which "reduces memory usage enough to finetune a 65B parameter model on a single 48GB GPU while preserving full 16-bit finetuning task performance".
+
+The sample counts trainable parameters for adapters on every linear layer of one invented transformer layer (hidden size 4,096, MLP width 14,336, four attention projections and three MLP projections, no grouped-query attention), and then works out what Unsloth's default batch settings mean in examples.
+
+Sample: `site/samples/m6/06-1.py`.
+
+```python
+from serving_lab_lessons.finetune import adapter_share, effective_batch, optimizer_steps
+
+d, ff = 4096, 14336
+layer = [(d, d)] * 4 + [(d, ff), (d, ff), (ff, d)]
+for rank in (8, 16, 64):
+    a = adapter_share(layer, rank)
+    print(
+        f"rank {rank:>2}: {a['lora']:>9,} trainable of {a['full']:,} per layer ({a['share']:.2%})"
+    )
+
+batch = effective_batch(per_device=2, accumulation=4)
+print(f"effective batch {batch}; max_steps = 60 sees {60 * batch} examples")
+for epochs in (1, 3):
+    print(f"1,000 examples, {epochs} epoch(s): {optimizer_steps(1000, batch, epochs)} steps")
+```
+
+Output, run on 2026-10-22:
+
+```
+rank  8:   704,512 trainable of 243,269,632 per layer (0.29%)
+rank 16: 1,409,024 trainable of 243,269,632 per layer (0.58%)
+rank 64: 5,636,096 trainable of 243,269,632 per layer (2.32%)
+effective batch 8; max_steps = 60 sees 480 examples
+1,000 examples, 1 epoch(s): 125 steps
+1,000 examples, 3 epoch(s): 375 steps
+```
+
+At rank 16 an adapter trains 0.58% of the layer's weights. The paper's 10,000-fold figure is for GPT-3 175B and depends on which matrices get adapters and at which rank; the ratio for your model is a quick calculation like this one. What the adapter saves is optimizer state and gradients; the frozen weights still have to fit, which is what QLoRA's 4-bit base addresses.
+
+Unsloth puts the order bluntly: "A common mistake is jumping straight into full fine-tuning (FFT), which is compute-heavy. Start by testing with LoRA or QLoRA first, if it won't work there, it almost certainly won't work with FFT." It also says "When done correctly, LoRA can match FFT", and that "Research shows that training and serving in the same precision helps preserve accuracy", so an adapter trained on a 4-bit base belongs on a 4-bit base when you serve it.
+
+### SFT, DPO, GRPO: chosen by the data you have
+
+Unsloth names the families: "The standard method of post training is called Supervised Fine-Tuning (SFT). Other methods include preference optimization (DPO, ORPO), distillation and Reinforcement Learning (RL) (GRPO, GSPO)". The choice follows from what you can collect.
+
+- **SFT** needs demonstrations: a prompt and the answer you want. Ticket descriptions with the accepted diff, support questions with the reply an agent sent and nobody corrected. It teaches format and style fastest.
+- **DPO** needs pairs: for one prompt, an answer people preferred and one they rejected. The paper's method trains "with only a simple classification loss" and is "computationally lightweight, eliminating the need for sampling from the LM during fine-tuning". Review history is a natural source: a diff a reviewer accepted against the version they sent back.
+- **GRPO** needs a reward a program can compute. DeepSeekMath introduced it as "a variant of Proximal Policy Optimization (PPO)" that "enhances mathematical reasoning abilities while concurrently optimizing the memory usage of PPO". A factory has rewards of this kind: tests that pass, a linter that is clean, a schema that validates. The model samples answers during training, so each step costs generation as well as a backward pass.
+
+### Unsloth's defaults
+
+The guide recommends "keeping the default settings unless you need longer training or larger batch sizes": `per_device_train_batch_size = 2`, `gradient_accumulation_steps = 4` ("Simulates a larger batch size without increasing memory usage"), `max_steps = 60` for a first run, then `num_train_epochs = 1` for a full run ("1–3 epochs recommended to avoid overfitting"), and `learning_rate = 2e-4` ("Lower for slower but more precise fine-tuning"). The sample's arithmetic shows what the quick test is: 60 steps at an effective batch of 8 see 480 examples, half an epoch of a 1,000-example set. It checks that the pipeline runs and the loss moves, and it proves nothing about quality.
+
+On the loss, the guide says "a loss around 0.5 to 1.0 is a good sign, but it depends on your dataset and task", and "If the loss goes to 0, that could mean overfitting, so it's important to check validation too." Training loss tells you the model fits your examples. Whether it does the task better is the eval's job.
+
+### Evaluate before and after with M2's harness
+
+The fine-tune has to beat the cheapest alternative on the same measurement, so the baseline is the base model with the best prompt you have, and retrieval if the task uses it, run through M2's harness: a fixed dataset, a judge whose agreement with human labels you measured, and a summary stored as the baseline. The fine-tuned model runs on the same set with the same judge, and M2's gate decides: it fails when the pass rate drops by more than 2 percentage points against the baseline or any failure category grows by more than 3.
+
+Three rules keep that comparison honest:
+
+- **No eval items in training.** Split before you build the training set, and check for near-duplicates ([M2 lesson 03](../../m2/03-datasets-and-contamination/)).
+- **Compare per category.** An adapter that fixes the format can break something it was never shown; the per-category check catches a shift that leaves the pass rate flat.
+- **Count the cost.** Record training GPU hours and the serving cost per million tokens (lesson 05) next to the score. A fine-tune that matches the prompted baseline at the same serving cost has bought a second artefact to maintain and nothing else.
+
+### Serving the adapter
+
+vLLM serves LoRA adapters next to the base model: start it with `--enable-lora` and `--lora-modules {name}={path}`, and "Requests can specify the LoRA adapter as if it were any other model via the `model` request parameter." `--max-lora-rank` "controls the maximum rank allowed for LoRA adapters", and the docs advise setting it to your highest adapter rank, since larger values waste memory. The production stack chart has matching switches (`enableLoRA`, and a `LoraAdapter` custom resource in the vendored chart's `crds/`). Because the adapter is a model name, the gateway from stage 05 can route to it like any other model, and the eval harness can call base and adapter on the same server. For a single machine, Unsloth's guide exports to GGUF for Ollama or llama.cpp.
+
+## Common pitfalls
+
+- **Fine-tuning facts that change.** The next edit to the runbook needs a training run. Put changing knowledge in retrieval, where an update is a re-index.
+- **No prompted baseline.** Comparing the fine-tune with the bare base model credits training with what a prompt would have done.
+- **Training on the eval set.** Scores rise and mean nothing. Split first and deduplicate.
+- **Trusting training loss.** A loss near zero can be memorisation; only the held-out eval says whether the task improved.
+- **Full fine-tuning first.** It costs more and rarely shows anything an adapter could not. Run LoRA or QLoRA, and move up only when the adapter has shown the direction works.
+- **Serving in another precision.** An adapter trained on a 4-bit base and served on a 16-bit one, or the reverse, can lose accuracy.
+
+## What interviewers ask
+
+**When would you fine-tune instead of using RAG?**
+For behaviour, not facts: a strict output format, a house style, a narrow classification, or moving a task from a large model to a small one for cost. Facts that change and must be cited stay in retrieval, because retrieval gives a source to cite, a score to refuse on and an update path that is a re-index. The answer can be both: retrieval for knowledge, an adapter for format.
+
+**Why LoRA rather than full fine-tuning?**
+It trains a small fraction of the parameters, so optimizer memory and checkpoints are small, the paper reports no added inference latency, and one base model can serve several adapters by name. QLoRA adds a 4-bit base, which fits larger models on one GPU. If a direction does not work with LoRA, full fine-tuning rarely rescues it.
+
+**SFT, DPO or GRPO for a coding agent?**
+It depends on the data. Accepted diffs for ticket descriptions are demonstrations, so SFT. Accepted against rejected versions from code review are preference pairs, so DPO. Tests that pass or fail are a computable reward, so GRPO, at the price of sampling during training.
+
+**How do you know the fine-tune helped?**
+Run the base model with its best prompt through the eval harness and store that as the baseline, then run the fine-tuned model on the same held-out set with the same validated judge and gate on the pass rate and per-category counts. Report the training and serving cost next to the score.
+
+## Sources
+
+- [Unsloth: Fine-tuning LLMs Guide](https://unsloth.ai/docs/get-started/fine-tuning-llms-guide), sections What Is Fine-tuning, LoRA/QLoRA, training hyperparameters and evaluation, checked 2026-10-22
+- Edward J. Hu et al., [LoRA: Low-Rank Adaptation of Large Language Models](https://arxiv.org/abs/2106.09685), 2021-06-17, abstract, checked 2026-10-22
+- Tim Dettmers et al., [QLoRA: Efficient Finetuning of Quantized LLMs](https://arxiv.org/abs/2305.14314), 2023-05-23, abstract, checked 2026-10-22
+- Rafael Rafailov et al., [Direct Preference Optimization: Your Language Model is Secretly a Reward Model](https://arxiv.org/abs/2305.18290), 2023-05-29, abstract, checked 2026-10-22
+- Zhihong Shao et al., [DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models](https://arxiv.org/abs/2402.03300), 2024-02-05, abstract (GRPO), checked 2026-10-22
+- [vLLM docs: LoRA adapters](https://docs.vllm.ai/en/stable/features/lora/), page dated 2026-10-09, serving with `--enable-lora` and `--lora-modules`, checked 2026-10-22
+- Course code (repository files, not web sources): M4's records `course/m4-retrieval-lab/fixtures/live_answer_run.json` and `live_local_models_run.json`, M4 lessons 01 and 06, M2's gate in `course/m2-evals-lab/README.md`, the vendored chart under `course/m6-serving-lab/fixtures/k8s/vllm-stack-0.1.13/`, the lesson helpers in `course/m6-serving-lab/lesson_support/src/serving_lab_lessons/finetune.py`

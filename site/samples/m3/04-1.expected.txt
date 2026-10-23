@@ -1,0 +1,7 @@
+runs / tickets             40 / 10
+total cost, USD             4.8683
+mean cache-hit ratio         0.664
+costliest quartile share     43.1%
+runs with a result              38
+max |delta| below 1e-9        True
+cache read as input, USD   13.6050

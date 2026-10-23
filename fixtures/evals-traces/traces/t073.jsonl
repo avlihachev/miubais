@@ -1,0 +1,19 @@
+{"n": 1, "role": "user", "text": "Ticket 024-email-domain-case:\n\n# 024: Addresses with upper-case domains count as different recipients\n\nnormalize(\" Bob@Example.COM \") returns \"Bob@Example.COM\", so dedupe sends two letters to the same person. Strip whitespace and lower-case the domain; keep the local part as it is. Failing test: tests/test_addresses.py::test_normalize_lowercases_domain. Acceptance: `pytest --runxfail tests/test_addresses.py::test_normalize_lowercases_domain -q` passes, the rest of the suite still passes, and no test file is edited."}
+{"n": 2, "role": "assistant", "text": "Starting with the test.", "message_id": "msg_519fb2eb6589fb4e9b0f15e9"}
+{"n": 3, "role": "assistant", "tool": "Read", "input": {"file_path": "tests/test_addresses.py"}, "message_id": "msg_519fb2eb6589fb4e9b0f15e9"}
+{"n": 4, "role": "tool", "tool": "Read", "output": "import pytest\nfrom mailmerge.addresses import dedupe, normalize\n\n\ndef test_dedupe_keeps_order():\n    assert dedupe([\"a@x.io\", \"b@x.io\", \"a@x.io\"]) == [\"a@x.io\", \"b@x.io\"]\n\n\n@pytest.mark.xfail(strict=True, reason=\"ticket 024\")\ndef test_normalize_lowercases_domain():\n    assert normalize(\" Bob@Example.COM \") == \"Bob@example.com\""}
+{"n": 5, "role": "assistant", "text": "The test pins down what normalize should do. Now src/mailmerge/addresses.py.", "message_id": "msg_dac0e29a062e3b2fcd38782c"}
+{"n": 6, "role": "assistant", "tool": "Read", "input": {"file_path": "src/mailmerge/addresses.py"}, "message_id": "msg_dac0e29a062e3b2fcd38782c"}
+{"n": 7, "role": "tool", "tool": "Read", "output": "def normalize(address: str) -> str:\n    return address.strip()\n\n\ndef dedupe(addresses: list[str]) -> list[str]:\n    seen: dict[str, None] = {}\n    for address in addresses:\n        seen.setdefault(normalize(address), None)\n    return list(seen)"}
+{"n": 8, "role": "assistant", "tool": "Write", "input": {"file_path": "/tmp/check_normalize.py", "content": "from mailmerge import *\n"}, "message_id": "msg_62ead3e8c7e20b2c515dd3bc"}
+{"n": 9, "role": "tool", "tool": "Write", "output": "PreToolUse hook denied this tool call: /tmp/check_normalize.py is outside the writable roots"}
+{"n": 10, "role": "assistant", "text": "Scratch files outside the repo are blocked. I'll go straight to the fix.", "message_id": "msg_8c6dbd24eff028012e55d2ed"}
+{"n": 11, "role": "assistant", "text": "normalize() only strips. The domain needs lower-casing while the local part stays as it is.", "message_id": "msg_dbbc51ef6c03414782488141"}
+{"n": 12, "role": "assistant", "tool": "Edit", "input": {"file_path": "src/mailmerge/addresses.py", "old_string": "    return address.strip()", "new_string": "    local, _, domain = address.strip().rpartition(\"@\")\n    return f\"{local}@{domain.lower()}\""}, "message_id": "msg_dbbc51ef6c03414782488141"}
+{"n": 13, "role": "tool", "tool": "Edit", "output": "The file src/mailmerge/addresses.py has been updated."}
+{"n": 14, "role": "assistant", "tool": "Bash", "input": {"command": "python -m pytest --runxfail -q tests/test_addresses.py::test_normalize_lowercases_domain"}, "message_id": "msg_9c14cdd173dec5d65c39cb82"}
+{"n": 15, "role": "tool", "tool": "Bash", "output": ".                                                                        [100%]\n1 passed in 0.03s"}
+{"n": 16, "role": "assistant", "tool": "Bash", "input": {"command": "python -m pytest -q --deselect tests/test_addresses.py::test_normalize_lowercases_domain"}, "message_id": "msg_90a2211449229703ce3680df"}
+{"n": 17, "role": "tool", "tool": "Bash", "output": "...............x.                                                        [100%]\n16 passed, 1 deselected, 1 xfailed in 0.05s"}
+{"n": 18, "role": "assistant", "text": "Ticket 024 is fixed: normalize() lower-cases the domain and keeps the local part.", "message_id": "msg_68180d186710a0e95b00ba58"}
+{"n": 19, "role": "result", "subtype": "success", "cost_usd": 0.2, "num_turns": 8}

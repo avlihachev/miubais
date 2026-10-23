@@ -1,0 +1,42 @@
+exercise: m7-capstone
+module: m7
+title: Pre-review and what blocks prod
+package: capstone
+stages:
+  - id: "01-rule-loader"
+    title: Path-scoped rules from .claude/rules
+    tests: tests/test_01_rule_loader.py
+    lesson: m7/02-conventions-of-a-go-ts-proto-migrations-repo
+  - id: "02-review-runner"
+    title: A read-only review runner with structured findings
+    tests: tests/test_02_review_runner.py
+    lesson: m7/03-reading-a-pr-with-a-read-only-agent
+  - id: "03-filter-and-dedupe"
+    title: "Finding hygiene: touched files, dedupe, confidence and the verify gate's word"
+    tests: tests/test_03_filter_and_dedupe.py
+    lesson: m7/01-review-as-a-measurable-pipeline
+  - id: "04-verify-gate"
+    title: Apply the patch to a copy and run go test and node --test
+    tests: tests/test_04_verify_gate.py
+    lesson: m7/04-blocker-ranking-from-repository-signals
+    requires: [go, node]
+  - id: "05-blocker-ranking"
+    title: Blockers from repository signals, ranked per PR
+    tests: tests/test_05_blocker_ranking.py
+    lesson: m7/04-blocker-ranking-from-repository-signals
+  - id: "06-review-metrics"
+    title: Precision and recall against labels
+    tests: tests/test_06_review_metrics.py
+    lesson: m7/01-review-as-a-measurable-pipeline
+  - id: "07-review-policy"
+    title: Review policy for the twelve PRs (judgment stage)
+    tests: tests/test_07_review_policy.py
+    lesson: m7/04-blocker-ranking-from-repository-signals
+    requires: [go, node]
+  - id: "08-live-review"
+    title: "Live: review all twelve PRs and write the report"
+    tests: tests/test_08_live_review.py
+    lesson: m7/05-from-pre-review-to-what-blocks-prod
+    live: true
+    requires: [claude-auth, go, node]
+    timeout: 1800

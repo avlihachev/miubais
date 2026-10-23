@@ -1,0 +1,24 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": {
+    "id": "msg_lp1",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-opus-5-5",
+    "content": [
+      {
+        "type": "text",
+        "text": "Checking the catalogue."
+      }
+    ],
+    "stop_reason": "pause_turn",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 712,
+      "output_tokens": 12
+    }
+  }
+}

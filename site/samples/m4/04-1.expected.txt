@@ -1,0 +1,3 @@
+lambda 1.0: ['setup A', 'setup A (overlap)', 'pricing']
+lambda 0.7: ['setup A', 'pricing', 'setup A (overlap)']
+lambda 0.3: ['setup A', 'limits', 'pricing']

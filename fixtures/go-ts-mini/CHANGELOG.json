@@ -1,0 +1,31 @@
+[
+  {
+    "version": "0.4.0",
+    "date": "2026-10-10",
+    "entries": [
+      "Filter the job list with ?status=",
+      "Reject unknown fields in POST /jobs"
+    ]
+  },
+  {
+    "version": "0.3.0",
+    "date": "2026-09-28",
+    "entries": [
+      "Record the translator of a job"
+    ]
+  },
+  {
+    "version": "0.2.0",
+    "date": "2026-09-14",
+    "entries": [
+      "Expose the due date as due_at"
+    ]
+  },
+  {
+    "version": "0.1.0",
+    "date": "2026-09-01",
+    "entries": [
+      "Create, list, get and cancel jobs"
+    ]
+  }
+]

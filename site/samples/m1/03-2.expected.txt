@@ -1,0 +1,6 @@
+stopped_by=success turns=3 cost=$0.1840
+  claude-opus-5-5    $0.1210  66%
+  claude-sonnet-5-5  $0.0630  34%
+main-loop input tokens in usage: 9200
+denials: 1 ['/work/tinyshop/tests/test_pricing.py']
+approve: False findings: ['important']

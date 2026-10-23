@@ -1,0 +1,15 @@
+{"n": 1, "role": "user", "text": "Ticket 015-tag-dedupe:\n\n# 015: Tags are duplicated when the case differs\n\nadd_tag(task, \"Home\") after add_tag(task, \"home\") stores both. Tags should be compared case-insensitively and stored lower-case. Failing test: tests/test_tags.py::test_add_tag_ignores_case. Acceptance: `pytest --runxfail tests/test_tags.py::test_add_tag_ignores_case -q` passes, the rest of the suite still passes, and no test file is edited."}
+{"n": 2, "role": "assistant", "tool": "Read", "input": {"file_path": "/usr/lib/python3.12/_pydatetime.py"}, "message_id": "msg_d7f1991181e1ce222834caf5"}
+{"n": 3, "role": "tool", "tool": "Read", "output": "[2,662 lines] # full module source\n... (full file returned)"}
+{"n": 4, "role": "assistant", "tool": "Bash", "input": {"command": "find / -name '*.py' -newer pyproject.toml 2>/dev/null"}, "message_id": "msg_904803a72293d96e2b770afc"}
+{"n": 5, "role": "tool", "tool": "Bash", "output": "[42,642 lines] /usr/lib/python3.12/abc.py\n... (output truncated at 30,000 characters)"}
+{"n": 6, "role": "assistant", "tool": "Bash", "input": {"command": "python -m pytest -vv --durations=0"}, "message_id": "msg_b55a0c0cb9a06b7c73985724"}
+{"n": 7, "role": "tool", "tool": "Bash", "output": "[4,307 lines] ============================= test session starts ==============================\n... (output truncated at 30,000 characters)"}
+{"n": 8, "role": "assistant", "tool": "Read", "input": {"file_path": "tests/fixtures/tasks-export.json"}, "message_id": "msg_dc8081158362d4ceb6f73ad3"}
+{"n": 9, "role": "tool", "tool": "Read", "output": "[31,870 lines] ... (full file returned)"}
+{"n": 10, "role": "assistant", "tool": "Read", "input": {"file_path": "src/tasktrack/tags.py"}, "message_id": "msg_b7e1d2a3f713b337a0d744c7"}
+{"n": 11, "role": "tool", "tool": "Read", "output": "from tasktrack.models import Task\n\n\ndef add_tag(task: Task, tag: str) -> None:\n    tag = tag.strip()\n    if tag and tag not in task.tags:\n        task.tags.append(tag)\n\n\ndef remove_tag(task: Task, tag: str) -> None:\n    task.tags = [t for t in task.tags if t != tag.strip()]"}
+{"n": 12, "role": "assistant", "text": "Now I have the context. The membership check is case-sensitive and the tag is stored as given. Lower-casing right after strip() covers both.", "message_id": "msg_0578f68e460cfaf71b5ccf74"}
+{"n": 13, "role": "assistant", "tool": "Edit", "input": {"file_path": "src/tasktrack/tags.py", "old_string": "    tag = tag.strip()", "new_string": "    tag = tag.strip().lower()"}, "message_id": "msg_0578f68e460cfaf71b5ccf74"}
+{"n": 14, "role": "tool", "tool": "Edit", "output": "The file src/tasktrack/tags.py has been updated."}
+{"n": 15, "role": "result", "subtype": "error_max_budget_usd", "cost_usd": 0.94, "num_turns": 6}

@@ -1,0 +1,4 @@
+apiVersion: v2
+name: kube-prometheus-stack
+version: 82.4.3
+description: Placeholder for the optional kube-prometheus-stack dependency, not vendored (see VENDORED.md)

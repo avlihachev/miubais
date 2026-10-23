@@ -1,0 +1,72 @@
+pr-01:
+  findings: []
+  blockers: []
+  verify: pass
+  decision: merge
+pr-02:
+  findings:
+    - {file: proto/jobs/v1/jobs.proto, start: 8, end: 13, category: proto-field-reuse, severity: blocker}
+  blockers: []
+  verify: pass
+  decision: block
+pr-03:
+  findings:
+    - {file: proto/jobs/v1/jobs.proto, start: 34, end: 35, category: proto-missing-reserved, severity: major}
+    - {file: proto/jobs/v1/jobs.proto, start: 38, end: 39, category: proto-missing-reserved, severity: major}
+  blockers: [missing-second-approval]
+  verify: pass
+  decision: hold
+pr-04:
+  findings:
+    - {file: migrations/0004_add_due_at_index.sql, start: 1, end: 1, category: migration-number-collision, severity: blocker}
+  blockers: [stale-migration]
+  verify: pass
+  decision: block
+pr-05:
+  findings:
+    - {file: migrations/0002_add_due_at.sql, start: 1, end: 1, category: migration-edited-applied, severity: blocker}
+  blockers: []
+  verify: pass
+  decision: block
+pr-06:
+  findings:
+    - {file: internal/api/handlers.go, start: 31, end: 31, category: changelog-missing, severity: minor}
+    - {file: internal/api/handlers.go, start: 132, end: 136, category: input-unvalidated, severity: major}
+  blockers: []
+  verify: pass
+  decision: hold
+pr-07:
+  findings:
+    - {file: web/src/format.ts, start: 4, end: 4, category: ts-any, severity: minor}
+    - {file: web/src/format.test.ts, start: 15, end: 16, category: test-removed, severity: major}
+  blockers: [verify-failed]
+  verify: fail
+  decision: block
+pr-08:
+  findings:
+    - {file: web/src/api.ts, start: 3, end: 3, category: secret-in-code, severity: blocker}
+  blockers: []
+  verify: pass
+  decision: block
+pr-09:
+  findings:
+    - {file: internal/api/handlers.go, start: 118, end: 121, category: error-swallowed, severity: major}
+  blockers: [verify-failed]
+  verify: fail
+  decision: block
+pr-10:
+  findings: []
+  blockers: [conflict]
+  verify: conflict
+  decision: block
+pr-11:
+  findings: []
+  blockers: [unreviewed-age]
+  verify: pass
+  decision: hold
+pr-12:
+  findings:
+    - {file: internal/jobs/model.go, start: 31, end: 31, category: api-breaking, severity: blocker}
+  blockers: []
+  verify: pass
+  decision: block

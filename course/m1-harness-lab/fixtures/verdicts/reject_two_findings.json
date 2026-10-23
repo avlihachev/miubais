@@ -1,0 +1,7 @@
+{
+  "approve": false,
+  "findings": [
+    {"file": "src/tinyshop/pricing.py", "line": 14, "severity": "critical", "note": "discount rounds half up instead of half even"},
+    {"file": "src/tinyshop/cart.py", "line": 3, "severity": "minor", "note": "unused import"}
+  ]
+}

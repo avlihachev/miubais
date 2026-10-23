@@ -1,0 +1,35 @@
+---
+title: A software factory, built as a course
+description: For engineers who already run agents and want to be the person who runs the factory.
+template: splash
+freshness: skip
+---
+
+import CheckRun from "../../components/landing/CheckRun.astro";
+import FactoryMap from "../../components/landing/FactoryMap.astro";
+import ModuleTable from "../../components/landing/ModuleTable.astro";
+import HowItGoes from "../../components/landing/HowItGoes.astro";
+
+<div class="mg-intro">
+
+The factory: a ticket comes in from an issue tracker, a support widget or an alert. An agent takes it, writes the fix and opens a pull request. In the most aggressive setups it merges and deploys **with no human in between.**
+
+Companies are building toward that right now. The question is not whether it works on a demo. It is what makes such a line safe to run every day:
+
+- a harness that **denies** rather than suggests,
+- evals you can trust **more than your own eye**,
+- a **cost per task**, not per month,
+- an automated reviewer that says **what blocks prod**,
+- and a record of all of it.
+
+This course builds those parts one module at a time. You pass a module by making its tests go green. Lessons carry the date their sources were checked and the versions they ran against. Where a claim needs a model, the course ran it once and **committed the numbers**.
+
+</div>
+
+<CheckRun />
+
+<FactoryMap />
+
+<ModuleTable />
+
+<HowItGoes />

@@ -1,0 +1,62 @@
+pr-01:
+  summary: Adds formatDue to the web client with tests and a 0.5.0 changelog entry. Looks ready.
+  findings:
+    - {file: web/src/format.ts, line: 27, severity: minor, category: style, confidence: 0.65, message: "86_400_000 is a magic number; name it MS_PER_DAY"}
+    - {file: CHANGELOG.json, line: 5, severity: minor, category: changelog-missing, confidence: 0.3, message: "The changelog entry may need to mention the web client"}
+pr-02:
+  summary: Adds a turnaround priority across proto, Go and the changelog, but the proto field reuses a published number.
+  findings:
+    - {file: proto/jobs/v1/jobs.proto, line: 12, severity: blocker, category: proto-field-reuse, confidence: 0.95, rule: proto, message: "priority takes field number 4, which was reserved for a removed field"}
+    - {file: proto/jobs/v1/jobs.proto, line: 11, severity: blocker, category: proto-field-reuse, confidence: 0.8, rule: proto, message: "The reserved 4 statement was deleted to make room for priority"}
+    - {file: internal/api/handlers.go, line: 59, severity: major, category: input-unvalidated, confidence: 0.45, rule: api, message: "priority may need a length check before it reaches the service"}
+pr-03:
+  summary: Removes the pagination fields from ListJobs without reserving their numbers or names.
+  findings:
+    - {file: proto/jobs/v1/jobs.proto, line: 34, severity: major, category: proto-missing-reserved, confidence: 0.9, rule: proto, message: "page_size was removed from ListJobsRequest without a reserved statement"}
+    - {file: proto/jobs/v1/jobs.proto, line: 39, severity: major, category: proto-missing-reserved, confidence: 0.85, rule: proto, message: "next_page_token was removed from ListJobsResponse without a reserved statement"}
+    - {file: CHANGELOG.json, line: 3, severity: minor, category: style, confidence: 0.4, message: "The version bump could be major rather than minor"}
+pr-04:
+  summary: Adds an overdue query and an index migration; the new migration reuses number 0004.
+  findings:
+    - {file: migrations/0004_add_due_at_index.sql, line: 1, severity: blocker, category: migration-number-collision, confidence: 0.95, rule: migrations, message: "0004 is already taken by 0004_index_status.sql; the next number is 0005"}
+    - {file: migrations/0004_index_status.sql, line: 1, severity: blocker, category: migration-number-collision, confidence: 0.85, rule: migrations, message: "0004_index_status.sql shares its number with another migration"}
+    - {file: internal/jobs/service.go, line: 50, severity: minor, category: style, confidence: 0.62, message: "Overdue could reuse filterByStatus instead of its own loop"}
+pr-05:
+  summary: Gives new jobs a default due date by editing migration 0002 in place.
+  findings:
+    - {file: migrations/0002_add_due_at.sql, line: 1, severity: blocker, category: migration-edited-applied, confidence: 0.92, rule: migrations, message: "0002_add_due_at.sql is already applied; add the default in a new migration"}
+    - {file: migrations/0002_add_due_at.sql, line: 1, severity: blocker, category: migration-edited-applied, confidence: 0.7, rule: migrations, message: "The DEFAULT clause changes an applied migration"}
+pr-06:
+  summary: Adds PUT /jobs/{id}/translator and Service.SetTranslator with a handler test.
+  findings:
+    - {file: internal/api/handlers.go, line: 133, severity: major, category: input-unvalidated, confidence: 0.88, rule: api, message: "The translator goes to SetTranslator without the length check create applies"}
+    - {file: internal/api/handlers.go, line: 130, severity: major, category: error-swallowed, confidence: 0.62, rule: api, message: "The decode error is replaced by a generic message and its cause is lost"}
+    - {file: internal/api/handlers.go, line: 31, severity: minor, category: changelog-missing, confidence: 0.55, rule: changelog, message: "A new endpoint is user-visible but CHANGELOG.json has no entry"}
+pr-07:
+  summary: formatHours now accepts strings from the CSV import. The tests pass with the new string input.
+  findings:
+    - {file: web/src/format.ts, line: 4, severity: minor, category: ts-any, confidence: 0.9, rule: web, message: "formatHours takes any; use number | string and parse explicitly"}
+    - {file: web/src/format.test.ts, line: 15, severity: major, category: test-removed, confidence: 0.8, rule: web, message: "The minutes test was deleted instead of kept passing"}
+pr-08:
+  summary: Adds create() and authenticates the client, with a hard-coded API token in source.
+  findings:
+    - {file: web/src/api.ts, line: 3, severity: blocker, category: secret-in-code, confidence: 0.97, rule: web, message: "API_TOKEN is a live credential committed to the repository"}
+    - {file: web/src/api.ts, line: 3, severity: minor, category: style, confidence: 0.7, message: "Module constants elsewhere use camelCase, not SCREAMING_CASE"}
+pr-09:
+  summary: Makes cancel idempotent with a changelog entry; all tests pass.
+  findings:
+    - {file: internal/api/handlers.go, line: 119, severity: major, category: error-swallowed, confidence: 0.86, rule: api, message: "job, _ = drops the error from Get and answers 200 with an empty job"}
+    - {file: internal/store/memory.go, line: 20, severity: major, category: error-swallowed, confidence: 0.8, rule: api, message: "Put ignores a possible error from the map write"}
+pr-10:
+  summary: Adds Cache-Control no-store to error responses with a changelog entry.
+  findings:
+    - {file: internal/api/errors.go, line: 14, severity: minor, category: style, confidence: 0.35, message: "The header could be set once in a middleware"}
+pr-11:
+  summary: Extracts filterByStatus and save in the service; behaviour is unchanged.
+  findings:
+    - {file: internal/jobs/service.go, line: 48, severity: major, category: error-swallowed, confidence: 0.64, rule: api, message: "The List error is wrapped but the partial result is discarded"}
+pr-12:
+  summary: Renames created_at to createdAt in responses and the web client, with a 0.5.0 changelog entry.
+  findings:
+    - {file: internal/jobs/model.go, line: 31, severity: blocker, category: api-breaking, confidence: 0.93, rule: api, message: "Renaming the created_at JSON field breaks existing clients; it needs a major bump"}
+    - {file: web/src/api.ts, line: 12, severity: blocker, category: api-breaking, confidence: 0.5, rule: api, message: "createdAt changes the client's Job type"}

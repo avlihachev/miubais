@@ -1,0 +1,6 @@
+{
+  "approve": false,
+  "findings": [
+    {"file": "src/tinyshop/cart.py", "line": 9, "severity": "blocker", "note": "negative quantity accepted"}
+  ]
+}

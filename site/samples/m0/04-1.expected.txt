@@ -1,0 +1,9 @@
+first request: {"custom_id": "item-1", "params": {"model": "claude-opus-5-5", "max_tokens": 16000, "messages": [{"role": "user", "content": "Summarise changelog entry 1 in two sentences."}]}}
+item 1: succeeded retryable=False text='answer one'
+item 2: errored   retryable=False text=None
+item 3: succeeded retryable=False text='answer three'
+item 4: succeeded retryable=False text='answer four'
+item 5: expired   retryable=True text=None
+item 6: succeeded retryable=False text='answer six'
+billed 4 of 6: standard $0.0432, batch $0.0216
+resubmit: ['5']

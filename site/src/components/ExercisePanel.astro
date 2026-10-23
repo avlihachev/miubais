@@ -1,0 +1,19 @@
+---
+interface Props {
+  exercise: string;
+  stages: { id: string; title: string }[];
+}
+
+const { exercise, stages } = Astro.props;
+---
+
+<miubais-exercise-panel exercise={exercise} data-stages={JSON.stringify(stages)}>
+  <p>Check your work from the clone:</p>
+  <pre><code>uv run miubais check {exercise}
+uv run miubais hint {exercise}</code></pre>
+  <p>Opened from <code>pnpm dev</code> on localhost with <code>uv run miubais serve</code> running, this panel runs them for you.</p>
+</miubais-exercise-panel>
+
+<script>
+  import "./exercise-panel";
+</script>

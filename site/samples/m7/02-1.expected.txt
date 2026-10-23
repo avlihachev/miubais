@@ -1,0 +1,16 @@
+api        internal/api/**/*.go, internal/jobs/**/*.go
+changelog  (no paths: always loaded)
+migrations migrations/*.sql
+proto      proto/**/*.proto
+web        web/**/*.{ts,tsx}
+
+web widget     changelog web
+new migration  changelog migrations
+contract       changelog proto
+docs only      changelog
+
+pattern            path                              ** ok  ** as *
+**/*.ts            web/src/api.ts                    True   False
+**/*.ts            api.ts                            True   False
+web/**/*.{ts,tsx}  web/src/widgets/due-badge.tsx     True   False
+migrations/*.sql   migrations/archive/0001_init.sql  False  False

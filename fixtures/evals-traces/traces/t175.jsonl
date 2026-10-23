@@ -1,0 +1,22 @@
+{"n": 1, "role": "user", "text": "Ticket 015-tag-dedupe:\n\n# 015: Tags are duplicated when the case differs\n\nadd_tag(task, \"Home\") after add_tag(task, \"home\") stores both. Tags should be compared case-insensitively and stored lower-case. Failing test: tests/test_tags.py::test_add_tag_ignores_case. Acceptance: `pytest --runxfail tests/test_tags.py::test_add_tag_ignores_case -q` passes, the rest of the suite still passes, and no test file is edited."}
+{"n": 2, "role": "assistant", "text": "Starting with the test.", "message_id": "msg_c02d0cd43dd716136e40cbc0"}
+{"n": 3, "role": "assistant", "tool": "Read", "input": {"file_path": "tests/test_tags.py"}, "message_id": "msg_c02d0cd43dd716136e40cbc0"}
+{"n": 4, "role": "tool", "tool": "Read", "output": "import pytest\nfrom tasktrack.models import Task\nfrom tasktrack.tags import add_tag\n\n\n@pytest.mark.xfail(strict=True, reason=\"ticket 015\")\ndef test_add_tag_ignores_case():\n    task = Task(\"water plants\")\n    add_tag(task, \"home\")\n    add_tag(task, \"Home\")\n    assert task.tags == [\"home\"]"}
+{"n": 5, "role": "assistant", "text": "The test pins down what add_tag should do. Now src/tasktrack/tags.py.", "message_id": "msg_bffffb8e43e3ade5b7a1db88"}
+{"n": 6, "role": "assistant", "tool": "Read", "input": {"file_path": "src/tasktrack/tags.py"}, "message_id": "msg_bffffb8e43e3ade5b7a1db88"}
+{"n": 7, "role": "tool", "tool": "Read", "output": "from tasktrack.models import Task\n\n\ndef add_tag(task: Task, tag: str) -> None:\n    tag = tag.strip()\n    if tag and tag not in task.tags:\n        task.tags.append(tag)\n\n\ndef remove_tag(task: Task, tag: str) -> None:\n    task.tags = [t for t in task.tags if t != tag.strip()]"}
+{"n": 8, "role": "assistant", "text": "The membership check is case-sensitive and the tag is stored as given. Lower-casing right after strip() covers both.", "message_id": "msg_ddf8e92c1e764413632f2e56"}
+{"n": 9, "role": "assistant", "tool": "Edit", "input": {"file_path": "src/tasktrack/tags.py", "old_string": "    tag = tag.strip()", "new_string": "    tag = tag.strip().lower()"}, "message_id": "msg_ddf8e92c1e764413632f2e56"}
+{"n": 10, "role": "tool", "tool": "Edit", "output": "The file src/tasktrack/tags.py has been updated."}
+{"n": 11, "role": "assistant", "tool": "Bash", "input": {"command": "python -m pytest --runxfail -q tests/test_tags.py::test_add_tag_ignores_case"}, "message_id": "msg_980f2cbfac469e1c4de74c30"}
+{"n": 12, "role": "tool", "tool": "Bash", "output": ".                                                                        [100%]\n1 passed in 0.03s"}
+{"n": 13, "role": "assistant", "tool": "Bash", "input": {"command": "python -m pytest -q --deselect tests/test_tags.py::test_add_tag_ignores_case"}, "message_id": "msg_44254d88aad66537a747d5ac"}
+{"n": 14, "role": "tool", "tool": "Bash", "output": ".............x.....                                                      [100%]\n18 passed, 1 deselected, 1 xfailed in 0.03s"}
+{"n": 15, "role": "assistant", "text": "The fix is verified. Before the summary I'll check how the rest of the environment uses this, to be thorough.", "message_id": "msg_4023d33e0addf0b2bd43c5a6"}
+{"n": 16, "role": "assistant", "tool": "Grep", "input": {"pattern": "add_tag", "path": "/work", "-n": true}, "message_id": "msg_4023d33e0addf0b2bd43c5a6"}
+{"n": 17, "role": "tool", "tool": "Grep", "output": "[31,475 matches across 2,265 files, first 400 shown]\n/work/.venv/lib/python3.12/site-packages/..."}
+{"n": 18, "role": "assistant", "tool": "Read", "input": {"file_path": "tests/fixtures/tasks-export.json"}, "message_id": "msg_e7cf48c8f0f170f355a5652d"}
+{"n": 19, "role": "tool", "tool": "Read", "output": "[31,870 lines] ... (full file returned)"}
+{"n": 20, "role": "assistant", "tool": "Read", "input": {"file_path": "/usr/lib/python3.12/_pydatetime.py"}, "message_id": "msg_c0ed44bdbba3c575bd80c1ff"}
+{"n": 21, "role": "tool", "tool": "Read", "output": "[2,662 lines] # full module source\n... (full file returned)"}
+{"n": 22, "role": "result", "subtype": "error_max_budget_usd", "cost_usd": 0.76, "num_turns": 8}

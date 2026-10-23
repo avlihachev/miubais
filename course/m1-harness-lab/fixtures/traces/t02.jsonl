@@ -1,0 +1,23 @@
+{"n": 1, "role": "user", "text": "Ticket 001-discount-rounding:\n\n# 001: Discounted totals round half-cents down\n\nA cart worth 12.25 with code SAVE10 comes out at 11.02; finance expects 11.03. Failing test: tests/test_pricing.py::test_discount_rounds_half_up. Acceptance: `pytest --runxfail tests/test_pricing.py::test_discount_rounds_half_up -q` passes, the rest of the suite still passes, and no test file is edited."}
+{"n": 2, "role": "assistant", "text": "I'll find the discount function."}
+{"n": 3, "role": "assistant", "tool": "Grep", "input": {"pattern": "def discount", "path": "src"}}
+{"n": 4, "role": "tool", "tool": "Grep", "output": "src/tinyshop/pricing.py:20:def discount(total: Decimal, code: str | None) -> Decimal:"}
+{"n": 5, "role": "assistant", "tool": "Read", "input": {"file_path": "src/tinyshop/pricing.py"}}
+{"n": 6, "role": "tool", "tool": "Read", "output": "from decimal import Decimal\n\nPRICES = {\n    \"apple\": Decimal(\"0.35\"),\n    \"pear\": Decimal(\"0.45\"),\n    \"widget\": Decimal(\"12.99\"),\n}\nCODES = {\n    \"SAVE10\": Decimal(\"0.10\"),\n    \"SAVE15\": Decimal(\"0.15\"),\n    \"HALF\": Decimal(\"0.50\"),\n}\n\ndef unit_price(sku: str) -> Decimal:\n    ...\n\ndef discount(total: Decimal, code: str | None) -> Decimal:\n    if code is None:\n        return total.quantize(Decimal(\"0.01\"))\n    if code not in CODES:\n        raise ValueError(f\"unknown code: {code}\")\n    cents = total * (1 - CODES[code]) * 100\n    return Decimal(round(cents)) / 100"}
+{"n": 7, "role": "assistant", "text": "round() on a Decimal rounds half to even, which would explain 1102.5 cents becoming 1102. I'd like to confirm with a scratch script."}
+{"n": 8, "role": "assistant", "tool": "Write", "input": {"file_path": "/tmp/check_round.py", "content": "from decimal import Decimal\nprint(round(Decimal('1102.5')))\n"}}
+{"n": 9, "role": "tool", "tool": "Write", "output": "PreToolUse hook denied this tool call: /tmp/check_round.py: not under a writable root"}
+{"n": 10, "role": "assistant", "text": "Scratch files outside src/ are not allowed here, so I'll check inline instead."}
+{"n": 11, "role": "assistant", "tool": "Bash", "input": {"command": "python -c \"from decimal import Decimal; print(round(Decimal('1102.5')), round(Decimal('12.5')))\""}}
+{"n": 12, "role": "tool", "tool": "Bash", "output": "1102 12"}
+{"n": 13, "role": "assistant", "text": "Confirmed: half to even. I'll quantize to cents with ROUND_HALF_UP."}
+{"n": 14, "role": "assistant", "tool": "Edit", "input": {"file_path": "src/tinyshop/pricing.py", "old_string": "from decimal import Decimal\n", "new_string": "from decimal import ROUND_HALF_UP, Decimal\n"}}
+{"n": 15, "role": "tool", "tool": "Edit", "output": "The file src/tinyshop/pricing.py has been updated."}
+{"n": 16, "role": "assistant", "tool": "Edit", "input": {"file_path": "src/tinyshop/pricing.py", "old_string": "    cents = total * (1 - CODES[code]) * 100\n    return Decimal(round(cents)) / 100", "new_string": "    return (total * (1 - CODES[code])).quantize(Decimal(\"0.01\"), rounding=ROUND_HALF_UP)"}}
+{"n": 17, "role": "tool", "tool": "Edit", "output": "The file src/tinyshop/pricing.py has been updated."}
+{"n": 18, "role": "assistant", "tool": "Bash", "input": {"command": "python -m pytest --runxfail -q tests/test_pricing.py::test_discount_rounds_half_up"}}
+{"n": 19, "role": "tool", "tool": "Bash", "output": ".                                                                        [100%]\n1 passed in 0.02s"}
+{"n": 20, "role": "assistant", "tool": "Bash", "input": {"command": "python -m pytest -q --deselect tests/test_pricing.py::test_discount_rounds_half_up"}}
+{"n": 21, "role": "tool", "tool": "Bash", "output": "...........x.x.                                                         [100%]\n13 passed, 1 deselected, 2 xfailed in 0.04s"}
+{"n": 22, "role": "assistant", "text": "discount() used round(), which rounds half-cents to even; it now quantizes to cents with ROUND_HALF_UP. The ticket test passes with --runxfail and the rest of the suite is green."}
+{"n": 23, "role": "result", "subtype": "success", "cost_usd": 0.17, "num_turns": 9}

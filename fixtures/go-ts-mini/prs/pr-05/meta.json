@@ -1,0 +1,10 @@
+{
+  "title": "Give new jobs a default due date",
+  "author": "emil",
+  "created_at": "2026-10-15",
+  "approvals": [
+    "bruno",
+    "dara"
+  ],
+  "description": "New jobs get a due date three days after creation, in the service and as the column default, so the overdue view has data from day one."
+}

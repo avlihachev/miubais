@@ -1,0 +1,250 @@
+---
+title: Measuring TTFT, TPS and cost
+description: Exact definitions of time to first token, per-request tokens per second, latency and throughput as the course's load generator measures them, nearest-rank percentiles and why p99 of eight requests is the maximum, closed-loop against open-loop load, and the cost per million output tokens with the GPU price as an input, compared with an API list price.
+module: m6
+order: 5
+verified_on: 2026-10-22
+executed: local
+pins:
+  "pypi:claude-agent-sdk": "0.2.168"
+  "github:vllm-project/vllm": "v0.31.0"
+  "github:llm-d/llm-d": "v0.10.0"
+  "github:kubernetes-sigs/gateway-api-inference-extension": "v1.6.2"
+  "github:kedacore/keda": "v2.21.0"
+  "model:default": claude-opus-5-5
+sources:
+  - url: https://docs.vllm.ai/en/stable/design/metrics/
+    title: "vLLM docs: Metrics"
+    published: 2026-10-12
+    checked: 2026-10-22
+  - url: https://docs.vllm.ai/en/stable/benchmarking/cli/
+    title: "vLLM docs: Benchmark CLI"
+    published: 2026-10-06
+    checked: 2026-10-22
+  - url: https://en.wikipedia.org/wiki/Percentile
+    title: "Wikipedia: Percentile"
+    checked: 2026-10-22
+  - url: https://numpy.org/doc/stable/reference/generated/numpy.percentile.html
+    title: numpy.percentile (NumPy 2.5)
+    checked: 2026-10-22
+  - url: https://thundercompute.com/blog/nvidia-h100-pricing
+    title: "Thunder Compute: NVIDIA H100 pricing (secondary)"
+    published: 2026-10-16
+    checked: 2026-10-22
+  - url: https://select.keenable.ai/r/nvidia-h100-cloud-pricing-effective-gpu-hour/0gylVL227KGhgrGMOkZZ9g
+    title: "Keenable: NVIDIA H100 cloud pricing per effective GPU-hour (secondary)"
+    published: 2026-08-29
+    checked: 2026-10-22
+  - url: https://platform.claude.com/docs/en/about-claude/pricing
+    title: Claude API pricing
+    checked: 2026-10-22
+---
+
+import Segments from "../../../components/diagrams/Segments.astro";
+
+**Prerequisites:** [lesson 03](../03-running-locally/), which runs the load generator against a local model and records the numbers this lesson reads, and stage 01 of the exercise, which builds the load generator.
+
+## Why this matters for the factory
+
+"Should we self-host this model?" turns into three questions with numbers: how long until the user sees the first token, how fast the rest arrives, and what a million output tokens cost compared with the API. Each number has several definitions in circulation. A vendor's "tokens per second" can be one stream's decode speed or the whole server's output, a TTFT can be measured at the server or at the client, and a cost per million tokens can assume a GPU that is busy every second it is billed. Two benchmarks that differ in any of these choices cannot be compared, and a serving decision made on the wrong one can be off by an order of magnitude.
+
+Stage 01 of the exercise pins one set of definitions in code and tests them against a fake server whose speed you set. Stage 06 turns a run into a report with a cost model. This lesson explains the definitions and the cost arithmetic, and where each one misleads.
+
+## Core idea
+
+One streamed request, from the client's side:
+
+<Segments
+  label="Timeline of one streamed request as the load generator sees it"
+  title="client clock, from send →"
+  segments={[
+    { name: "queue", detail: ["waits for a batch slot"], size: 1.4, mark: "TTFT: send → first content delta" },
+    { name: "prefill", detail: ["prompt pass"], size: 0.8 },
+    { name: "decode", detail: ["one content delta per token"], size: 2.4, mark: "TPS: tokens ÷ (last − first token time)" },
+    { name: "[DONE]", size: 0.6 },
+  ]}
+  note="Latency runs from send to [DONE]. Throughput is a property of the run, not of a request: all successful output tokens ÷ the run's wall time."
+/>
+
+- **TTFT** is the time from sending the request to the first chunk whose `delta.content` is non-empty. It includes the network, the queue and the prefill.
+- **TPS** per request is `output_tokens / (last token time − first token time)`, the decode speed one user sees.
+- **Latency** is send to `[DONE]`. A stream that ends without `[DONE]` is a failure, never a short success.
+- **Throughput** is the successful requests' output tokens divided by the wall time of the whole run, what the server produces for everyone together.
+- **Cost per million output tokens** is the GPU's price for the billed seconds divided by the output tokens produced in them, in millions.
+
+## Mechanics
+
+### What counts as a token
+
+The load generator counts content deltas, not what the server's `usage` says, because it needs a time for each token. Three kinds of chunk are not tokens: the first chunk, which carries only `{"role": "assistant"}`; the finish chunk with `finish_reason` and an empty delta; and the usage chunk with `choices: []`. Reasoning models add a fourth. Stage 02 found that `qwen3.5:0.8b` on Ollama spends its whole 48-token budget on `delta.reasoning` chunks with an empty `delta.content`, so no token counts and TTFT is `None`; the test sends `{"reasoning_effort": "none"}`. On a reasoning model, the time to the first visible token and the time to the first token of any kind are different numbers, and a report has to say which one it shows.
+
+vLLM measures TTFT too, as the histogram `vllm:time_to_first_token_seconds`, and its metrics docs say "we calculate this interval relative to when the request was first received by the frontend". The server's number leaves out the network and anything in front of vLLM, such as a gateway or an endpoint picker. The client's number is what a user experiences; the server's is what you can alert on per replica. vLLM also reports `vllm:inter_token_latency_seconds`, "time between consecutive streamed outputs", which is the inverse view of per-request TPS.
+
+The sample runs the definitions on three invented streams, all sent at time zero: one served at once, one that waited about 1.7 seconds for a slot, and one that produced a single token.
+
+Sample: `site/samples/m6/05-1.py`.
+
+```python
+from serving_lab_lessons.capacity import stream_metrics, throughput
+
+streams = {
+    "first in": ([0.40, 0.45, 0.50, 0.55, 0.60], 0.62),
+    "queued": ([2.10, 2.15, 2.20, 2.25, 2.30], 2.32),
+    "one token": ([0.38], 0.40),
+}
+results = {name: stream_metrics(times, done) for name, (times, done) in streams.items()}
+for name, m in results.items():
+    tps = "None" if m["tps"] is None else f"{m['tps']:.1f}"
+    print(
+        f"{name:<10} ttft {m['ttft_ms']:7.1f} ms  tps {tps:>5}  latency {m['latency_ms']:7.1f} ms"
+    )
+
+wall_s = max(done for _, done in streams.values())
+tokens = [m["tokens"] for m in results.values()]
+print(f"throughput {throughput(tokens, wall_s):.2f} output tokens/s over {wall_s} s")
+```
+
+Output, run on 2026-10-22:
+
+```
+first in   ttft   400.0 ms  tps  25.0  latency   620.0 ms
+queued     ttft  2100.0 ms  tps  25.0  latency  2320.0 ms
+one token  ttft   380.0 ms  tps  None  latency   400.0 ms
+throughput 4.74 output tokens/s over 2.32 s
+```
+
+The queued request has the same TPS as the first one and five times its TTFT: queueing shows up in TTFT only, which is why stage 01's tests check that eight requests against two server slots raise p90 TTFT well above a run within the slots. A single token has no span to divide by, so its TPS is `None` and drops out of the percentiles instead of becoming infinite. The definition divides five tokens by four gaps, so a five-token stream reads 25 tokens per second where the gap rate is 20; on a 256-token stream the difference is under 0.4%. Throughput, 4.74 tokens per second, is far below any single stream's TPS because the run's wall time includes the queued request's wait.
+
+### Percentiles by nearest rank
+
+Averages hide the tail, so the summary reports p50, p90 and p99 of TTFT. Stage 01 fixes the method: sort ascending and take the value at rank `ceil(p / 100 × n)`, at least 1. This is the nearest-rank method, and "A percentile calculated using the nearest-rank method will always be a member of the original ordered list." NumPy's `percentile` defaults to `method='linear'`, which interpolates between neighbours and returns values nobody measured. The two agree on large samples and disagree on small ones:
+
+Sample: `site/samples/m6/05-2.py`.
+
+```python
+import math
+
+import numpy as np
+from serving_lab_lessons.capacity import nearest_rank
+
+ttft_ms = [310, 295, 320, 2900, 305, 330, 315, 300, 340, 325]
+for p in (50, 90, 99):
+    linear = np.percentile(ttft_ms, p)
+    print(f"p{p}: nearest rank {nearest_rank(ttft_ms, p):6.1f}   numpy linear {linear:6.1f}")
+
+ranks = {p: math.ceil(p / 100 * 8) for p in (50, 90, 99)}
+print("ranks used for n = 8:", ranks)
+```
+
+Output, run on 2026-10-22:
+
+```
+p50: nearest rank  315.0   numpy linear  317.5
+p90: nearest rank  340.0   numpy linear  596.0
+p99: nearest rank 2900.0   numpy linear 2669.6
+ranks used for n = 8: {50: 4, 90: 8, 99: 8}
+```
+
+With ten invented TTFTs and one cold outlier, linear p90 reports 596 ms, a value between two real requests, while nearest rank reports 340 ms, the ninth request. p99 of ten values is the maximum under nearest rank. The last line shows what that means for the course's own stage 02 run of eight requests: p90 and p99 both land on rank 8, the slowest request, which is why the committed record has `"p90": 2526.7` and `"p99": 2526.7`. A p99 that is not simply the worst request needs more than 100 requests.
+
+### Reading the stage 02 record
+
+The committed record, `fixtures/live_local_model_run.json`, has 8 requests at concurrency 2 with `max_tokens` 48 on Apple Silicon: TTFT p50 2281.5 ms, TPS p50 24.8, throughput 19.8 output tokens per second over 16.68 s, no failures. Throughput is below the per-request TPS because the wall time also covers the time before each first token: with a TTFT around 2.3 s and about 1.7 s of decode per request, even two streams running fully in parallel would average about 21 tokens per second. The record cannot say what the 2.3 s were: waiting behind the other request (`OLLAMA_NUM_PARALLEL` defaults to 1 and the record does not log it), loading the model (the run sent no warm-up request), or the machine. The 2.3 seconds describe this setup at concurrency 2 and say little about the model's prefill time; [lesson 03](../03-running-locally/) discusses what the laptop run does and does not show.
+
+### Closed-loop and open-loop load
+
+The course's load generator is closed-loop: it keeps `concurrency` requests in flight and sends the next one when one finishes. If the server slows down, the generator slows down with it, so the queue cannot grow past `concurrency`. Real users do not wait for each other. vLLM's own benchmark, `vllm bench serve`, can run open-loop: `--request-rate` "Controls the target request generation rate (requests per second)", with arrivals drawn from a Poisson process by default, and `--max-concurrency` "Limits concurrent outstanding requests" to model a gateway in front. It reports "Output token throughput (tok/s)", "Mean TTFT (ms)", "Median TPOT (ms)" and "P99 ITL (ms)", among others.
+
+Use the closed-loop generator to measure what a replica can do at a chosen concurrency, which is what the cost model needs. Use an open-loop rate sweep to find the arrival rate at which TTFT p90 crosses your target, which is what capacity planning needs.
+
+### Cost per million output tokens
+
+Stage 06's formula is
+
+```
+USD per million output tokens = (GPU USD/h ÷ 3600 × run seconds) ÷ (output tokens / 1e6)
+```
+
+with `output tokens = round(throughput × wall seconds)`. The GPU price is an argument, never a constant in the code, because it varies by provider, by region and by contract. And `run_s` is the GPU time you pay for, which can be longer than the load's wall time (model load, idle gaps between bursts) but never shorter.
+
+Prices for one H100 80GB on demand, from secondary sources: Thunder Compute's comparison table (updated 2026-10-16, U.S. regions, per GPU) lists $2.99 at Vultr, $3.29 at Lambda, $3.99 at Runpod, $4.50 at Nebius, $6.16 at CoreWeave and $6.88 on AWS (both normalised from 8-GPU nodes), up to $10.98 on Google Cloud, also normalised. Keenable's market survey run on 2026-08-29 puts marketplace clouds at $1.49 to $2.24 an hour, much of it interruptible. Thunder Compute sells H100s itself and appears in its own table; check the providers' pages before you put a price in a report.
+
+The sample prices `fixtures/benchmarks/sample-run.json`. That file is invented, marked `synthetic: true`, shaped like Qwen3.5-27B in FP8 on one H100 with 64 requests at concurrency 16; the course has no GPU to measure one.
+
+Sample: `site/samples/m6/05-3.py`.
+
+```python
+import json
+from pathlib import Path
+
+from serving_lab_lessons.capacity import usd_per_mtok_out
+
+run = json.loads(Path("course/m6-serving-lab/fixtures/benchmarks/sample-run.json").read_text())
+summary = run["summary"]
+tokens = round(summary["throughput_tps"] * summary["wall_s"])
+print(f"synthetic={run['synthetic']}: {tokens} output tokens in {summary['wall_s']} s")
+
+for usd_per_hour in (1.49, 2.99, 3.99, 6.88):
+    busy = usd_per_mtok_out(usd_per_hour, summary["wall_s"], tokens)
+    quarter = usd_per_mtok_out(usd_per_hour, 4 * summary["wall_s"], tokens)
+    print(f"{usd_per_hour:5.2f} USD/h: {busy:5.2f} USD/Mtok busy, {quarter:5.2f} at 25% busy")
+
+one_stream = usd_per_mtok_out(2.99, 3600, round(summary["p50_tps"] * 3600))
+print(f"one stream at a time, 2.99 USD/h: {one_stream:.2f} USD/Mtok")
+```
+
+Output, run on 2026-10-22:
+
+```
+synthetic=True: 16384 output tokens in 27.519 s
+ 1.49 USD/h:  0.70 USD/Mtok busy,  2.78 at 25% busy
+ 2.99 USD/h:  1.40 USD/Mtok busy,  5.58 at 25% busy
+ 3.99 USD/h:  1.86 USD/Mtok busy,  7.45 at 25% busy
+ 6.88 USD/h:  3.21 USD/Mtok busy, 12.84 at 25% busy
+one stream at a time, 2.99 USD/h: 19.78 USD/Mtok
+```
+
+Under these invented numbers, the price of the GPU moves the result by a factor of about 4.6 across the range, and utilisation by another factor of 4: a GPU busy a quarter of the billed time costs four times as much per token. Concurrency matters most. The same GPU serving one stream at a time produces only the per-request TPS, 42 tokens per second here, and the cost per million output tokens rises to $19.78.
+
+### The API comparison
+
+The Claude pricing page lists Opus 5.5 at $4 per million input tokens and $20 per million output tokens (checked 2026-10-22). Put next to the sample's numbers, the comparison is less direct than it looks:
+
+- An API price is per token and costs nothing while idle; a GPU costs the same per hour busy or idle, so the self-hosted figure holds only at the utilisation and concurrency it was measured at.
+- The API bills input tokens separately. The self-hosted run spends GPU seconds on prefill too, which are inside the throughput figure; a workload with long prompts and short answers (retrieval-heavy chat) gets fewer output tokens per GPU-hour than this sample's 256-token answers.
+- The models differ. A 27B open model at $1.40 per million tokens and Opus 5.5 at $20 are only comparable on tasks where the eval says the open model is good enough, which M2's harness can measure and this formula cannot.
+
+Stage 07's scenario prices the API route at this list price and states its own replica throughput and hourly cost; its arithmetic uses those numbers as given.
+
+## Common pitfalls
+
+- **Server TPS sold as user TPS.** In the invented sample run, the replica's throughput at concurrency 16 is fourteen times one stream's decode speed. Report both, and say which one a number is.
+- **Counting role-only or reasoning deltas as tokens.** The first is a header; the second is invisible to the user. Either one makes TTFT look better than what the user sees.
+- **A p99 from ten requests.** Under nearest rank it is the maximum; under linear interpolation it is a number nobody measured. Send enough requests for the percentile you report.
+- **No warm-up.** On a runtime that loads the model on demand, as Ollama does, the first request pays for the load. Send one and drop it, or report it separately.
+- **`run_s` equal to the load's wall time on a GPU that also idles.** The formula then assumes full utilisation. Bill the hours you actually rent.
+- **A closed-loop test for an SLA.** The generator slows down with the server, so queueing never builds the way it does under real arrivals.
+
+## What interviewers ask
+
+**Define TTFT and TPS precisely.**
+TTFT is send to the first non-empty content delta, measured at the client, so it includes network, queueing and prefill. Per-request TPS is output tokens divided by the time between the first and the last token, the decode speed one user sees. Throughput is total output tokens over the run's wall time, what the server produces for everyone. The server's own TTFT histogram starts when vLLM's frontend receives the request.
+
+**Your p99 TTFT went from 400 ms to 2.5 s after a deploy. Where do you look?**
+At the queue first: `vllm:num_requests_waiting` and TPS. If TPS is unchanged and the waiting count grew, that points at capacity or routing. Then at how many requests the percentile was computed from, whether the run had a warm-up, and whether prompt lengths changed, since longer prompts mean longer prefill.
+
+**How do you compute the cost per million tokens of a self-hosted model?**
+GPU price per hour divided by 3600, times the billed seconds, divided by the output tokens in millions. The tokens come from a run at a stated concurrency; the billed seconds include idle time. Then compare with the API's output price, remembering the API also bills input and costs nothing when idle.
+
+**When is self-hosting cheaper than the API?**
+When the GPU stays busy at high concurrency, prompts are short relative to outputs, and an eval shows the open model meets the quality bar for the task. Under the sample's invented numbers, the same H100 goes from $1.40 per million output tokens at concurrency 16 to $19.78 serving one stream at a time, so the answer depends on load shape more than on the hourly price.
+
+## Sources
+
+- [vLLM docs: Metrics](https://docs.vllm.ai/en/stable/design/metrics/), page dated 2026-10-12, the V1 metrics list and the frontend stats note on TTFT, checked 2026-10-22
+- [vLLM docs: Benchmark CLI](https://docs.vllm.ai/en/stable/benchmarking/cli/), page dated 2026-10-06, `vllm bench serve` options and output, checked 2026-10-22
+- [Wikipedia: Percentile](https://en.wikipedia.org/wiki/Percentile), section The nearest-rank method, checked 2026-10-22
+- [numpy.percentile](https://numpy.org/doc/stable/reference/generated/numpy.percentile.html), NumPy 2.5, the `method` parameter, checked 2026-10-22
+- Secondary price sources: [Thunder Compute: NVIDIA H100 pricing](https://thundercompute.com/blog/nvidia-h100-pricing), updated 2026-10-16, and [Keenable: NVIDIA H100 cloud pricing per effective GPU-hour](https://select.keenable.ai/r/nvidia-h100-cloud-pricing-effective-gpu-hour/0gylVL227KGhgrGMOkZZ9g), survey run 2026-08-29, both checked 2026-10-22
+- [Claude API pricing](https://platform.claude.com/docs/en/about-claude/pricing), the model pricing table, checked 2026-10-22
+- Course code (repository files, not web sources): stages 01, 02 and 06 in `course/m6-serving-lab/README.md`, the live record `course/m6-serving-lab/fixtures/live_local_model_run.json`, the synthetic run `course/m6-serving-lab/fixtures/benchmarks/sample-run.json`, the lesson helpers in `course/m6-serving-lab/lesson_support/src/serving_lab_lessons/capacity.py`

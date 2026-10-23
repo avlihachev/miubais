@@ -1,0 +1,9 @@
+{
+  "title": "Mark error responses as not cacheable",
+  "author": "emil",
+  "created_at": "2026-10-12",
+  "approvals": [
+    "chen"
+  ],
+  "description": "Adds Cache-Control: no-store to every JSON response and a request id to error bodies so support can trace failed calls."
+}

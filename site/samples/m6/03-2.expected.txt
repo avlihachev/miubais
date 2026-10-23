@@ -1,0 +1,9 @@
+qwen3.5:0.8b on ollama, Apple Silicon, CPU/GPU shared
+8 requests at concurrency 2, max_tokens 48
+TTFT ms p50/p90/p99: 2281.5 / 2526.7 / 2526.7
+requests with TTFT >= p50: at least 5 of 8
+output tokens ~330, 41.2 per request
+decode at p50 TPS 24.8: 1.66 s per request
+TTFT p50 + decode: 3.94 s
+wall 16.68 s over 4 rounds of 2: 4.17 s per round
+stage 08 local answers, one at a time (ms, tokens): [(548.1, 31), (644.6, 31), (748.3, 44)]

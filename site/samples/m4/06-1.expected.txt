@@ -1,0 +1,4 @@
+cited         {'sentences': 2, 'cited': [1, 2, 3], 'invalid': [], 'uncited': 0, 'refused': False}
+one uncited   {'sentences': 2, 'cited': [2], 'invalid': [], 'uncited': 1, 'refused': False}
+out of range  {'sentences': 1, 'cited': [], 'invalid': [7], 'uncited': 1, 'refused': False}
+refusal       {'sentences': 1, 'cited': [], 'invalid': [], 'uncited': 0, 'refused': True}

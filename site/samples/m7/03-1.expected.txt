@@ -1,0 +1,9 @@
+changed: internal/api/routes.go, web/src/legacy.ts
+accepted 1 of 4
+  internal/api/routes.go:0 rejected on line
+  web/src/legacy.ts:1 rejected on severity
+  internal/api/routes.go:14 rejected on category
+live run on claude-opus-5-5: 11 of 12 PRs reviewed
+cost per reviewed PR, USD: min 0.0353  median 0.0661  max 0.0953
+turns: median 3  max 5
+seconds per PR, tests and review: median 11.4

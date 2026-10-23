@@ -1,0 +1,6 @@
+synthetic=True: 16384 output tokens in 27.519 s
+ 1.49 USD/h:  0.70 USD/Mtok busy,  2.78 at 25% busy
+ 2.99 USD/h:  1.40 USD/Mtok busy,  5.58 at 25% busy
+ 3.99 USD/h:  1.86 USD/Mtok busy,  7.45 at 25% busy
+ 6.88 USD/h:  3.21 USD/Mtok busy, 12.84 at 25% busy
+one stream at a time, 2.99 USD/h: 19.78 USD/Mtok

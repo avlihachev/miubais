@@ -1,0 +1,9 @@
+{
+  "title": "Accept estimated hours from the CSV import in formatHours",
+  "author": "bruno",
+  "created_at": "2026-10-16",
+  "approvals": [
+    "emil"
+  ],
+  "description": "The CSV import hands estimated hours over as strings; formatHours now accepts both strings and numbers and always prints hours."
+}

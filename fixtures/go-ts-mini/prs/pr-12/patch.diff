@@ -1,0 +1,55 @@
+diff --git a/CHANGELOG.json b/CHANGELOG.json
+index 4768851..17d55fc 100644
+--- a/CHANGELOG.json
++++ b/CHANGELOG.json
+@@ -1,4 +1,11 @@
+ [
++  {
++    "version": "0.5.0",
++    "date": "2026-10-16",
++    "entries": [
++      "Rename created_at to createdAt in job responses"
++    ]
++  },
+   {
+     "version": "0.4.0",
+     "date": "2026-10-10",
+diff --git a/internal/jobs/model.go b/internal/jobs/model.go
+index 0d13a6e..ecbf1fa 100644
+--- a/internal/jobs/model.go
++++ b/internal/jobs/model.go
+@@ -28,7 +28,7 @@ type Job struct {
+ 	Translator    string     `json:"translator,omitempty"`
+ 	Status        Status     `json:"status"`
+ 	DueAt         *time.Time `json:"due_at,omitempty"`
+-	CreatedAt     time.Time  `json:"created_at"`
++	CreatedAt     time.Time  `json:"createdAt"`
+ }
+ 
+ type NewJob struct {
+diff --git a/web/src/api.ts b/web/src/api.ts
+index 28d168b..3744062 100644
+--- a/web/src/api.ts
++++ b/web/src/api.ts
+@@ -9,7 +9,7 @@ export interface Job {
+   translator?: string;
+   status: JobStatus;
+   due_at?: string;
+-  created_at: string;
++  createdAt: string;
+ }
+ 
+ export interface ApiErrorBody {
+diff --git a/web/src/format.test.ts b/web/src/format.test.ts
+index eb6c97f..01fe35e 100644
+--- a/web/src/format.test.ts
++++ b/web/src/format.test.ts
+@@ -10,7 +10,7 @@ const sample: Job = {
+   target_lang: "de",
+   hours_estimate: 0.4,
+   status: "in_progress",
+-  created_at: "2026-10-01T09:30:00Z",
++  createdAt: "2026-10-01T09:30:00Z",
+ };
+ 
+ test("formatHours shows minutes under one hour", () => {

@@ -1,0 +1,221 @@
+---
+title: "Context management: compaction, editing, memory"
+description: Keep long agent sessions inside the window and cheap with server-side compaction, context editing, the memory tool and mid-conversation system messages, and know which one each situation calls for.
+module: m0
+order: 6
+verified_on: 2026-10-17
+executed: none
+pins:
+  "pypi:anthropic": "1.15.0"
+  "model:default": claude-opus-5-5
+sources:
+  - url: https://platform.claude.com/docs/en/build-with-claude/compaction
+    title: Compaction
+    checked: 2026-10-17
+  - url: https://platform.claude.com/docs/en/build-with-claude/compaction-threshold
+    title: Compaction at a token threshold
+    checked: 2026-10-17
+  - url: https://platform.claude.com/docs/en/build-with-claude/compaction-on-demand
+    title: Compaction on demand
+    checked: 2026-10-17
+  - url: https://platform.claude.com/docs/en/build-with-claude/context-editing
+    title: Context editing
+    checked: 2026-10-17
+  - url: https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool
+    title: Memory tool
+    checked: 2026-10-17
+  - url: https://platform.claude.com/docs/en/build-with-claude/mid-conversation-system-messages
+    title: Mid-conversation system messages and tool changes
+    checked: 2026-10-17
+  - url: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+    title: Prompt caching
+    checked: 2026-10-17
+  - url: https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence
+    title: Optimizing for cost and intelligence
+    checked: 2026-10-17
+---
+
+import Segments from "../../../components/diagrams/Segments.astro";
+
+**Prerequisites:** [lesson 03](../03-prompt-caching/), because each context tool here is judged by what it does to the cached prefix.
+
+## Why this matters for the factory
+
+A factory agent that fixes a flaky test, migrates a module or works through a backlog runs for hundreds of requests. Every request re-sends the whole history, so without intervention three things go wrong together. The context approaches the 1M-token window of Opus 5.5 and the session dies. The input bill grows with roughly the square of the turn count, because a 40-turn task sends its first turn 40 times (Optimizing for cost and intelligence). And quality degrades as the context grows: Anthropic's compaction pages give that as a reason to keep the active context small, not only to fit the window.
+
+The API gives you four tools for this, and they are easy to confuse. Compaction replaces old turns with a summary. Context editing clears old tool results or thinking blocks by rule. The memory tool moves knowledge out of the context into files your application stores. Mid-conversation system messages let you change instructions without rewriting the start of the prompt. Each interacts with prompt caching (lesson 03) differently, and two of them changed shape recently, so this lesson is about choosing between them on cost, quality and cache behaviour. The features are beta, so the samples show request shapes; this lesson does not run them.
+
+## Core idea
+
+Think of the context as three regions with different lifetimes, and of each feature as acting on one of them.
+
+<Segments
+  label="Three regions of the context and the feature that acts on each"
+  segments={[
+    {
+      name: "tools + system",
+      detail: ["stable, cached"],
+      notes: ["mid-conversation system message: change instructions without touching this"],
+    },
+    {
+      name: "history",
+      detail: ["grows every request: old tool results, old thinking, decisions, dead ends"],
+      size: 1.8,
+      notes: ["compaction: summarise", "context editing: clear by rule (tool results, thinking)"],
+    },
+    {
+      name: "newest turn",
+      size: 1.2,
+      notes: ["memory tool: what must outlive the session goes to files, read back on demand"],
+    },
+  ]}
+/>
+
+Compaction is lossy and general: the model writes a summary of everything before a point, and the summary replaces it. Context editing is lossless for what it keeps and blunt for what it drops: the oldest tool results (or thinking blocks) are replaced with a placeholder, everything else stays word for word. The memory tool does not shrink the context by itself; it gives the model a place to put facts before compaction or clearing removes them, and a way to retrieve them later, even in another session. Mid-conversation system messages do not manage size at all; they change instructions without editing the cached prefix.
+
+All four compete with the cache. Anything that changes a block invalidates the cache from that block onward, and the next request pays a 1.25x write on everything after it (Prompt caching). So the question for each feature is not only "how many tokens does it remove" but "how much cached prefix does it destroy, and how often".
+
+## Mechanics
+
+### Compaction: two kinds
+
+Threshold compaction is the automatic kind: beta header `compact-2026-01-12`, enabled by adding `{"type": "compact_20260112"}` to `context_management.edits` (Compaction at a token threshold). When input tokens reach the trigger, default `{"type": "input_tokens", "value": 150000}` and at least 50,000, the API summarises the conversation inside the request, returns a `compaction` block at the start of the assistant content, and continues the reply from the summary. You append `response.content` to your history as usual; on the next request the API ignores every block before the compaction block. Options: `instructions` replaces the default summarisation prompt entirely, and `pause_after_compaction: true` stops with `stop_reason: "compaction"` so you can re-insert recent turns before the reply.
+
+On-demand compaction is newer and, per the Compaction overview, the one to use wherever it is available: beta `compact-2026-09-04` and a top-level `compaction={"type": "summarize"}` parameter (Compaction on demand). Your code decides when. The response is a single signed `compaction` block with `stop_reason: "compaction"` and no reply. You then put that block first in `messages`, drop the summarised messages, and keep it exactly as returned, signature included. Leaving summarised messages in front of the block returns 400 (`compaction_block_misplaced`). It cannot be combined with `context_management` on one request, and the request must not carry `output_config.format`, `stop_sequences` or a forced `tool_choice`.
+
+Both bill the summarisation as an extra sampling step. Its usage appears in `usage.iterations` as a `compaction` entry, and the top-level `input_tokens` and `output_tokens` exclude it, so a ledger that reads only the top-level fields under-counts. Sum across `iterations`. Re-sending an existing block costs no further compaction.
+
+```python
+import anthropic
+
+client = anthropic.Anthropic()
+SYSTEM = [
+    {
+        "type": "text",
+        "text": "You are the release agent for the payments service. Keep answers short.",
+        "cache_control": {"type": "ephemeral"},
+    }
+]
+messages: list[dict] = []
+
+
+def turn(user_text: str) -> str:
+    messages.append({"role": "user", "content": user_text})
+    response = client.beta.messages.create(
+        betas=["compact-2026-01-12"],
+        model="claude-opus-5-5",
+        max_tokens=16000,
+        system=SYSTEM,
+        messages=messages,
+        context_management={
+            "edits": [{"type": "compact_20260112", "trigger": {"type": "input_tokens", "value": 150000}}]
+        },
+    )
+    messages.append({"role": "assistant", "content": response.content})
+    billed = sum(it.input_tokens + it.output_tokens for it in response.usage.iterations or [])
+    compacted = any(block.type == "compaction" for block in response.content)
+    print(f"stop={response.stop_reason} compacted={compacted} billed_tokens={billed}")
+    return "".join(block.text for block in response.content if block.type == "text")
+```
+
+This is an excerpt: call `turn("...")` repeatedly and the first reply past about 150,000 input tokens carries the compaction block.
+
+The `cache_control` on the system block is the detail that makes compaction cheap. The summary is new content and must be written to the cache, but without a breakpoint at the end of the system prompt the system prompt would be re-written with it; with one, the system prompt is read from cache and only the summary is written (Compaction at a token threshold). The same page warns that on Opus 5.5, Sonnet 5.5, Haiku 5.5 and Fable 5.1, thinking blocks from before a compaction block are not carried forward, and that assistant turns you re-insert after a pause must have their thinking blocks removed, or the continuation is rejected where the check is enforced.
+
+### Context editing: clearing by rule
+
+Context editing (beta `context-management-2025-06-27`) has two server-side strategies (Context editing). `clear_tool_uses_20250919` clears the oldest tool results once the prompt passes `trigger` (default 100,000 input tokens), keeps the most recent `keep` tool uses (default 3), optionally clears the tool inputs too (`clear_tool_inputs`), never touches tools in `exclude_tools`, and with `clear_at_least` refuses to act unless it can clear at least that many tokens. `clear_thinking_20251015` controls how many earlier assistant turns keep their thinking (`keep: {"type": "thinking_turns", "value": N}` or `"all"`); on Opus 4.5 and later, Sonnet 4.6 and later and Haiku 5.5 the default is to keep all. When you combine them, the thinking strategy must be listed first. The edit is applied server-side before the prompt reaches the model; your client keeps the full history, and the response's `context_management.applied_edits` reports what was cleared.
+
+```python
+import anthropic
+
+client = anthropic.Anthropic()
+response = client.beta.messages.create(
+    betas=["context-management-2025-06-27"],
+    model="claude-opus-5-5",
+    max_tokens=16000,
+    tools=[{"type": "memory_20250818", "name": "memory"}],
+    messages=[{"role": "user", "content": "Continue the dependency audit from your notes."}],
+    context_management={
+        "edits": [
+            {"type": "clear_thinking_20251015", "keep": "all"},
+            {
+                "type": "clear_tool_uses_20250919",
+                "trigger": {"type": "input_tokens", "value": 120000},
+                "keep": {"type": "tool_uses", "value": 5},
+                "clear_at_least": {"type": "input_tokens", "value": 40000},
+                "exclude_tools": ["memory"],
+            },
+        ]
+    },
+)
+print(response.stop_reason, getattr(response.context_management, "applied_edits", None))
+```
+
+The cache cost is the catch. Clearing tool results invalidates the cached prefix from the first cleared block, so every activation re-writes the history after it; `clear_at_least` exists so that each invalidation buys enough tokens to be worth it (Context editing). Keeping all thinking preserves the cache, which is why the sample sets `keep: "all"`. Anthropic measured the trade-off: on an earlier model, on a 20-issue triage run, context editing cost 73% more than the same run with caching and input trimming only, and on a run with 2.6 times the tokens it changed nothing, while compaction cut that long run by 32% (Optimizing for cost and intelligence). The guide's advice is to clear in a few large batches if you use it at all. One more reason to prefer the server side on current models: on Opus 5.5, Sonnet 5.5, Haiku 5.5 and Fable 5.1, server-side context management never invalidates thinking blocks, while editing an earlier turn yourself can invalidate the thinking in every later assistant turn (Context editing).
+
+### The memory tool
+
+The memory tool, `{"type": "memory_20250818", "name": "memory"}`, needs no beta header; the SDK helpers for it live in the beta namespace (Memory tool). It is a client tool: the model issues `view`, `create`, `str_replace`, `insert`, `delete` and `rename` commands on paths under `/memories`, and your handler executes them against storage you control and returns the results as ordinary `tool_result` blocks. Python ships `BetaAbstractMemoryTool` to subclass and `BetaLocalFilesystemMemoryTool` for local files. Because your code performs every operation, the security work is yours: validate every path against traversal such as `/memories/../../secrets.env` (resolve and check with `pathlib`'s `resolve()` and `relative_to()`), cap file sizes, and expire stale files.
+
+Memory pairs with the other two. With context editing on, the model receives an automatic warning as the context nears the clearing threshold, so it can write what matters from tool results to memory before they are cleared; excluding `memory` from clearing, as the sample does, keeps its own reads and writes visible. With compaction, memory holds what must survive the summary verbatim: file paths, decisions, the failing test's exact name.
+
+### Mid-conversation system messages
+
+To change instructions partway through, append `{"role": "system", "content": "..."}` to `messages` instead of editing the top-level `system` field. No beta header is needed, and the feature works on Opus 5.5, Sonnet 5.5, Haiku 5.5, Opus 5, Opus 4.8 and the Fable and Mythos 5.x models, not on Sonnet 5 (Mid-conversation system messages). The earlier prefix stays byte-identical, so the next request still reads the cache, and the instruction takes precedence over the top-level system field from that point on. A system message with content cannot be the first message, must immediately follow a user turn (including one that carries tool results) or an assistant turn ending in a server tool result, must precede an assistant turn or end the array, and cannot sit between a `tool_use` and its `tool_result`; elsewhere the API returns 400. On Sonnet 5.5 and Haiku 5.5 a system message right after tool results can be treated as untrusted text, so relay the user's own words as a text block after the last `tool_result` and keep harness notices in a separate system message.
+
+```python
+messages = [
+    {"role": "user", "content": "Run the test suite and fix any failures."},
+    {"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_01", "name": "run_tests", "input": {}}]},
+    {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_01", "content": "41 passed, 1 failed"}]},
+    {"role": "system", "content": "Release freeze starts in 20 minutes. Fix only the failing test; do not refactor."},
+]
+```
+
+Two interactions to remember. On-demand compaction summarises system messages inside the summarised range, so their instructions stop applying once the block replaces them; restate any that still matter in a new system message after the next user turn (Compaction on demand). And tool changes have a counterpart: with the `inline-tools-2026-09-15` beta, `tool_addition` and `tool_removal` blocks inside a system message offer or withdraw tools from that point on, while the `tools` array stays unchanged.
+
+### The 20-block lookback and tool-call bursts
+
+A cache read at a breakpoint walks back at most 20 block positions, counting the breakpoint itself, looking for an entry a previous request wrote (Prompt caching). In a growing conversation with the breakpoint on the last block, each request finds the previous request's write as long as fewer than 20 positions were added in between. On the Claude API a run of consecutive `tool_use` blocks counts as one position, and so does a run of consecutive `tool_result` blocks, so a parallel fan-out of 30 tool calls does not by itself break the cache. What does: a turn that adds many separately counted blocks, such as interleaved text and tool calls, many documents or images in one user message, or the same fan-out on a platform where runs are not collapsed. The symptom is `cache_read_input_tokens` dropping to zero with `cache_creation_input_tokens` near the full prompt. The fix is a second breakpoint at the end of the previous turn, using one of the 4 slots, so the lookback starts within reach of the old write.
+
+### Choosing
+
+Use compaction as the default for sessions that will outgrow the window or degrade with length; prefer on-demand where your models support it, because you choose the moment, and make cache-breaking changes (effort, tools) on the first request after a compaction, which in Anthropic's measurement was the cheapest point to make them (Optimizing for cost and intelligence). Use context editing when old tool results are bulky and genuinely dead, such as file dumps or search pages, set `clear_at_least` high, and measure, because it can cost more than it saves. Add the memory tool when knowledge must survive compaction or span sessions. Use mid-conversation system messages for every instruction change, whatever else you run.
+
+## Common pitfalls
+
+- **Reading only top-level `usage` with compaction on.** The summarisation step is reported in `usage.iterations` and excluded from the top-level counters. Sum across `iterations` in the ledger.
+- **Compaction that re-writes the system prompt.** Without a breakpoint at the end of `system`, each compaction re-caches the system prompt with the summary. Put `cache_control` on the last system block.
+- **Context editing with a small trigger and no `clear_at_least`.** Each activation invalidates the cache from the first cleared result, so frequent small clears turn reads into writes. Clear rarely and in large batches, or use compaction.
+- **Mangling the on-demand compaction block.** Serialising it with a plain `model_dump()` adds `text: null` and `citations: null`, which the API rejects; leaving summarised messages in front of it returns 400. Keep the block exactly as returned, first in `messages`.
+- **A memory handler without path checks.** The model's paths are input to your filesystem. Resolve every path and reject anything outside `/memories`.
+- **Editing `system` to steer a long session.** It invalidates the whole cached history. Append a mid-conversation system message after a user turn instead.
+
+## What interviewers ask
+
+**What is the difference between compaction and context editing?**
+Compaction summarises everything before a point into one block, which is lossy but general and shrinks the context a lot. Context editing removes specific old content by rule (tool results, thinking) and keeps the rest verbatim, but each clear invalidates the cache from the first cleared block.
+
+**How does compaction interact with prompt caching?**
+The summary is new content and is written to the cache once; with a breakpoint at the end of the system prompt the system prompt stays a cache read, so only the summary is re-written. The best time for other cache-breaking changes is the first request after compaction, when the cache is being rebuilt anyway.
+
+**When would you add the memory tool to an agent that already uses compaction?**
+When some facts must survive verbatim or across sessions: exact identifiers, decisions and their reasons, a task list. Compaction keeps the context small; memory keeps what the summary might blur, and the model reads it back on demand.
+
+**Why use a mid-conversation system message instead of editing the system prompt?**
+Editing `system` changes the start of the prompt and invalidates the cache for the whole history; appending a system message leaves the prefix identical, so the next request still reads it. The message still carries operator-level authority and takes precedence over the top-level system field from that point on.
+
+**Does a burst of 30 parallel tool calls break prompt caching?**
+Not on the Claude API by itself: a run of consecutive `tool_use` or `tool_result` blocks counts as one position in the 20-block lookback. Turns that add 20 or more separately counted blocks can miss, and a second breakpoint at the end of the previous turn fixes that.
+
+## Sources
+
+- [Compaction](https://platform.claude.com/docs/en/build-with-claude/compaction), checked 2026-10-17
+- [Compaction at a token threshold](https://platform.claude.com/docs/en/build-with-claude/compaction-threshold), checked 2026-10-17
+- [Compaction on demand](https://platform.claude.com/docs/en/build-with-claude/compaction-on-demand), checked 2026-10-17
+- [Context editing](https://platform.claude.com/docs/en/build-with-claude/context-editing), checked 2026-10-17
+- [Memory tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool), checked 2026-10-17
+- [Mid-conversation system messages and tool changes](https://platform.claude.com/docs/en/build-with-claude/mid-conversation-system-messages), checked 2026-10-17
+- [Prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching), checked 2026-10-17
+- [Optimizing for cost and intelligence](https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence), checked 2026-10-17

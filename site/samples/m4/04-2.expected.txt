@@ -1,0 +1,9 @@
+BAAI/bge-small-en-v1.5 + Xenova/ms-marco-MiniLM-L-6-v2
+653 chunks, 48 queries, k=10, pool 50
+  hybrid    recall 0.740 mrr 0.552 ndcg 0.598
+  reranked  recall 0.781 mrr 0.648 ndcg 0.674
+  recall@10 conceptual 0.312 -> 0.438
+  recall@10 factual    0.938 -> 1.000
+  recall@10 lexical    0.969 -> 0.906
+pool recall@50 0.875
+index 50 s, rerank eval 80 s

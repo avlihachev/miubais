@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package jobs.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message Job {
+  reserved 4;
+  reserved "customer_email";
+
+  string id = 1;
+  string reference = 2;
+  string source_lang = 3;
+  string target_lang = 5;
+  double hours_estimate = 6;
+  string translator = 7;
+  string status = 8;
+  google.protobuf.Timestamp due_at = 9;
+}
+
+message CreateJobRequest {
+  string reference = 1;
+  string source_lang = 2;
+  string target_lang = 3;
+  double hours_estimate = 4;
+  string translator = 5;
+}
+
+message CreateJobResponse {
+  Job job = 1;
+}
+
+message ListJobsRequest {
+  string status = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListJobsResponse {
+  repeated Job jobs = 1;
+  string next_page_token = 2;
+}
+
+service JobService {
+  rpc CreateJob(CreateJobRequest) returns (CreateJobResponse);
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
+}

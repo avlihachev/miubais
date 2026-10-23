@@ -1,0 +1,51 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import { getCollection } from "astro:content";
+import { badgeFor, loadLatest } from "../lib/freshness";
+
+const report = loadLatest();
+const docs = new Map((await getCollection("docs")).map((d) => [d.id, d.data]));
+const rows = (report?.lessons ?? []).map((l) => {
+  const fm = docs.get(l.slug);
+  const lesson = fm?.verified_on && fm.executed ? { verified_on: fm.verified_on, executed: fm.executed, pins: fm.pins } : l;
+  const badge = badgeFor(lesson, l);
+  return {
+    slug: l.slug,
+    title: l.title,
+    color: badge.color,
+    verifiedOn: badge.verifiedOn,
+    executed: badge.executed,
+    drifts: badge.drifts.filter(([, d]) => d.level !== "patch").length,
+    broken: l.links.filter((link) => link.ok === false).length,
+  };
+});
+---
+
+<StarlightPage frontmatter={{ title: "Freshness", freshness: "skip" }}>
+  {
+    report ? (
+      <>
+        <p>Generated at {report.generated_at}</p>
+        <table>
+          <thead>
+            <tr><th>Lesson</th><th>Badge</th><th>Verified on</th><th>Executed</th><th>Drifts</th><th>Broken links</th></tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr>
+                <td><a href={`/${r.slug}/`}>{r.title}</a></td>
+                <td><span class="freshness-badge" data-color={r.color}>{r.color}</span></td>
+                <td>{r.verifiedOn}</td>
+                <td>{r.executed}</td>
+                <td>{r.drifts}</td>
+                <td>{r.broken}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </>
+    ) : (
+      <p>No freshness report yet. Run <code>uv run miubais freshen --out freshness</code> locally.</p>
+    )
+  }
+</StarlightPage>

@@ -1,0 +1,206 @@
+# Agent evals
+
+**Prerequisites:** [lesson 02](../02-judges-and-agreement/), which builds and validates the judge that grades a run's outcome; this lesson adds the path, the repeats and the user on the other side.
+
+## Why this matters for the factory
+
+A factory that merges agent work without a human reading every diff is betting on two numbers: how often a run is right, and how often it is right every time. The first is what most eval reports show. The second is what decides whether auto-merge is safe. A ticket-to-PR agent that solves a task on three of five tries looks fine on an average and is a liability in a pipeline that takes the first result it gets, because the pipeline does not get to pick the good try. Every failed run is still paid for, and a wrong run that passes the gate costs a revert, a review and a lost afternoon.
+
+Agents also fail in ways a final answer hides. A run can end with "all tests pass" after editing the test, or after running the tests before the last change. If the eval reads only the final message, both runs score as successes. The trace has the evidence, and the M1 harness already writes it in a form a grader can check line by line.
+
+## Core idea
+
+Anthropic's "Demystifying evals for AI agents" separates the two things you can grade. "The outcome is the final state in the environment at the end of the trial", and its example is the gap between what an agent says and what happened: "A flight-booking agent might say "Your flight has been booked" at the end of the transcript, but the outcome is whether a reservation exists in the environment's SQL database." The other object is the transcript: "A transcript (also called a trace or trajectory) is the complete record of a trial, including outputs, tool calls, reasoning, intermediate results, and any other interactions."
+
+```
+trial ──► trajectory (every tool call, result, message) ──► trajectory checks
+   │                                                        (tests after last edit,
+   │                                                         no test edits, no loops)
+   └────► outcome (repo state, test result, DB row) ─────► outcome grader
+                     run k times per task ──► pass@k (any try) and pass^k (every try)
+```
+
+Grade the outcome first, and treat trajectory checks as guards, not as a script. The same post warns against checking that agents "followed very specific steps like a sequence of tool calls in the right order. We've found this approach too rigid and results in overly brittle tests, as agents regularly find valid approaches that eval designers didn't anticipate." Its rule of thumb: "it's often better to grade what the agent produced, not the path it took." Trajectory checks earn their place where the path is part of correctness: a test file must not change, the tests must run after the last edit, an injected instruction must not be followed. Those are properties of the path that no final state can prove.
+
+Then run each task more than once. The τ-bench paper (Yao, Shinn, Razavi and Narasimhan, arXiv:2406.12045, June 2024) defines both metrics on n trials per task with c successes. pass@k is "the chance that at least one out of k i.i.d. task trials is successful"; pass^k is "the chance that all k i.i.d. task trials are successful, averaged across tasks". The unbiased estimators from the paper are:
+
+```
+pass@k = 1 - E_task[ C(n - c, k) / C(n, k) ]
+pass^k =     E_task[ C(c, k)     / C(n, k) ]
+```
+
+where C is the binomial coefficient. At k = 1 they coincide; the paper writes "pass^1=pass@1=E[r]=E[c/n]". After that they move in opposite directions. Anthropic's post puts numbers on it: "If your agent has a 75% per-trial success rate and you run 3 trials, the probability of passing all three is (0.75)³ ≈ 42%", and "By k=10, they tell opposite stories: pass@k approaches 100% while pass^k falls to 0%." Its guidance on which to use: "pass@k for tools where one success matters, pass^k for agents where consistency is essential."
+
+## Mechanics
+
+### Where the trace lines come from
+
+`harnesskit.traces.to_trace_lines(messages)` turns an Agent SDK message stream into numbered `TraceLine` records. Each `ToolUseBlock` in an `AssistantMessage` becomes an `assistant` line with `tool`, `input` and `message_id`; each `ToolResultBlock` in a `UserMessage` becomes a `tool` line with the tool's name and its `output`; the `ResultMessage` becomes a `result` line with `subtype`, `cost_usd` and `num_turns`. The M2 traces in `fixtures/evals-traces/` use exactly this shape (fixtures README), which is why a trajectory check written for the lab works on a real run.
+
+One gap is worth knowing before you build on it. `harnesskit.runner.consume`, which drives `run_ticket`, keeps the `AssistantMessage`s and the final `ResultMessage` and drops the `UserMessage`s that carry tool results. A `RunReport` is enough for cost and stop reasons, but not for a trajectory grader that needs to read test output. To record full trajectories, wrap the `query_fn` you pass to `run_ticket` so it copies every message to a list and write `to_trace_lines(copied)` next to the report.
+
+### Trajectory checks as code
+
+Hamel Husain and Shreya Shankar's FAQ splits agent evaluation into two phases. First "End-to-end task success. Treat the agent as a black box and decide whether it met the user's goal." Then, "Once error analysis reveals which workflows fail most often, move to step-level diagnostics", scoring parts such as "Tool choice: check whether the agent selected the appropriate tool" and "Efficiency: count the steps, seconds, and tokens spent." For tool calls specifically their advice is to "Test the tool name, arguments, result, and resulting state as separate checks", using code assertions where the expected behaviour is objective, and to remember that "A valid tool call can still be wrong if the user did not approve the action or the system skipped a required check." Anthropic's grader table lists the same thing among code-based graders: "Tool calls verification (tools used, parameters)".
+
+The helper `trajectory` collects three facts from trace lines: where the edits are, where the test runs are, and the largest number of times one identical call was repeated. `trajectory_checks` turns them into pass or fail. The two invented runs below end with the same result subtype and the same final message. Run them with `PYTHONPATH=course/m2-evals-lab/starter/src:course/m2-evals-lab/lesson_support/src uv run --frozen python site/samples/m2/04-2.py`; nothing calls a model.
+
+Sample: `site/samples/m2/04-2.py`.
+
+```python
+from evals_lab_lessons import trajectory, trajectory_checks
+from harnesskit import TraceLine
+
+
+def call(n: int, tool: str, **args: str) -> TraceLine:
+    return TraceLine(n=n, role="assistant", tool=tool, input=args)
+
+
+test = "uv run pytest -q"
+runs = {
+    "a": [
+        TraceLine(n=1, role="user", text="Fix the rounding bug in invoice totals."),
+        call(2, "Read", file_path="src/invoice.py"),
+        call(3, "Edit", file_path="src/invoice.py"),
+        call(4, "Bash", command=test),
+        TraceLine(n=5, role="tool", tool="Bash", output="1 failed, 41 passed"),
+        call(6, "Edit", file_path="src/invoice.py"),
+        call(7, "Bash", command=test),
+        TraceLine(n=8, role="tool", tool="Bash", output="42 passed"),
+        TraceLine(n=9, role="assistant", text="Fixed; all tests pass."),
+        TraceLine(n=10, role="result", subtype="success", num_turns=6),
+    ],
+    "b": [
+        TraceLine(n=1, role="user", text="Fix the rounding bug in invoice totals."),
+        call(2, "Edit", file_path="src/invoice.py"),
+        call(3, "Bash", command=test),
+        TraceLine(n=4, role="tool", tool="Bash", output="1 failed, 41 passed"),
+        call(5, "Edit", file_path="tests/test_invoice.py"),
+        call(6, "Edit", file_path="src/invoice.py"),
+        TraceLine(n=7, role="assistant", text="Fixed; all tests pass."),
+        TraceLine(n=8, role="result", subtype="success", num_turns=4),
+    ],
+}
+for name, lines in runs.items():
+    final = [line.text for line in lines if line.role == "assistant" and line.text][-1]
+    subtype = lines[-1].subtype
+    print(f"run {name}: result={subtype} final message={final!r}")
+    t = trajectory(lines)
+    print(f"  edits at {list(t.edits)}, test runs at {list(t.test_runs)}")
+    for check, ok in trajectory_checks(t).items():
+        print(f"  {'ok  ' if ok else 'FAIL'} {check}")
+```
+
+Output, run on 2026-10-17:
+
+```
+run a: result=success final message='Fixed; all tests pass.'
+  edits at [3, 6], test runs at [4, 7]
+  ok   tests ran after the last edit
+  ok   no test file edited
+  ok   no call repeated more than 2 times
+run b: result=success final message='Fixed; all tests pass.'
+  edits at [2, 5, 6], test runs at [3]
+  FAIL tests ran after the last edit
+  FAIL no test file edited
+  ok   no call repeated more than 2 times
+```
+
+An outcome grader that trusts the final message passes both runs. Run b edited a test after seeing a failure and never ran the suite again, so it breaks two clauses of the lab's written outcome rule (`course/m2-evals-lab/README.md`): the suite must be shown green after the last source edit, and no test file may be edited. A real outcome grader would also catch it by running the tests in a clean checkout; the trajectory check catches it without a second execution, and tells you why. These checks are cheap enough to run on every trace, which is the FAQ's case for code over judges whenever "a deterministic rule can identify the failure."
+
+### Simulated users
+
+Conversational agents need someone to talk to. Anthropic: "Unlike most other evals, they often require a second LLM to simulate the user." τ-bench built its benchmark this way, "dynamic conversations between a user (simulated by language models) and a language agent provided with domain-specific API tools and policy guidelines", and graded the outcome: "Our evaluation scheme compares the database state at the end of each episode with the ground truth expected state."
+
+The simulator is a second model with its own failure modes, and τ-bench documents them. Its limitations section notes that "the user simulation LM might have limited capacity at reasoning, calculation, long-context memorization, or alignment with the instruction prompt", and that user instructions "might contain typos or ambiguities". In its retail failure analysis, "4 of them are caused by user instruction typo or ambiguity (and then fixed)" out of 40 failed tasks. The outcome check has a gap of its own: "r=1 might be a necessary but not sufficient condition for a successful episode e.g., the agent might issue the return without explicit user confirmation, which violates the policy." The τ²-bench follow-up (Barres, Dong, Ray, Si and Narasimhan, arXiv:2506.07982, June 2025) responds with "A reliable user simulator tightly coupled with the environment, whose behavior is constrained by tools and observable states", and a telecom domain where both sides act on shared state. It reports "significant performance drops when agents shift from no-user to dual-control". The benchmark has kept being repaired since: the sierra-research/tau2-bench README, now titled for τ³-bench, lists "Task Quality (75+ fixes)" that "Removed incorrect expected actions, clarified ambiguous instructions, fixed impossible constraints", and a July 2026 grading update after which "results produced with tau2-bench < 1.0.1 are not comparable with >= 1.0.1". Even a public benchmark built by specialists ships broken tasks, and a score is only comparable within one task version.
+
+The practical rules: read simulator turns as part of error analysis, because a failure caused by the simulator is a broken task, not an agent bug; constrain the simulator with a script of facts it may reveal; and where real conversations exist, the FAQ's "N-1 testing" ("you provide the first N-1 turns of a real conversation and test what happens next") avoids synthetic users entirely at the cost of flexibility.
+
+### pass@k and pass^k from a run matrix
+
+The sample below is an invented matrix: eight tasks, five runs each, P for pass. `suite_pass_at_k` and `suite_pass_hat_k` apply the τ-bench estimators per task and average.
+
+Sample: `site/samples/m2/04-1.py`.
+
+```python
+from evals_lab_lessons import suite_pass_at_k, suite_pass_hat_k
+
+P, F = True, False
+runs = {
+    "fix-rounding": [P, P, P, P, P],
+    "add-endpoint": [P, P, P, P, P],
+    "rename-flag": [P, P, F, P, P],
+    "null-guard": [P, F, P, P, P],
+    "retry-on-429": [F, P, P, F, P],
+    "migrate-config": [P, F, F, P, F],
+    "flaky-cache": [F, F, P, F, F],
+    "cross-repo-bump": [F, F, F, F, F],
+}
+for task, results in runs.items():
+    print(f"{task:<16} {''.join('P' if r else '.' for r in results)}  {sum(results)}/5")
+print()
+print(f"{'k':>2} {'pass@k':>7} {'pass^k':>7}")
+for k in (1, 3, 5):
+    print(f"{k:>2} {suite_pass_at_k(runs, k):>7.4f} {suite_pass_hat_k(runs, k):>7.4f}")
+```
+
+Output, run on 2026-10-17:
+
+```
+fix-rounding     PPPPP  5/5
+add-endpoint     PPPPP  5/5
+rename-flag      PP.PP  4/5
+null-guard       P.PPP  4/5
+retry-on-429     .PP.P  3/5
+migrate-config   P..P.  2/5
+flaky-cache      ..P..  1/5
+cross-repo-bump  .....  0/5
+
+ k  pass@k  pass^k
+ 1  0.6000  0.6000
+ 3  0.8125  0.3625
+ 5  0.8750  0.2500
+```
+
+At k = 1 both are 0.60, the per-run pass rate. Asked "can the agent do it at all within three tries", the answer is 0.8125. Asked "will three runs all succeed", it is 0.3625, and at five runs only the two tasks that never failed count. The two tasks that matter most for a factory are `retry-on-429` and `migrate-config`: they look solved on a pass@k dashboard and are coin flips in production. One more reading from Anthropic's post applies to the last row: "a 0% pass rate across many trials (i.e. 0% pass@100) is most often a signal of a broken task, not an incapable agent". Check `cross-repo-bump` for a bad spec or grader before you count it against the agent.
+
+### Why consistency is the factory metric
+
+pass@k is the right number when a human or a verifier picks from several attempts, as in best-of-n sampling with a test suite as the filter. An auto-merging factory usually runs once and ships what it gets, so the expected rate of a clean merge is pass^1, and the rate at which a task class can be left unattended across many tickets is closer to pass^k for large k. τ-bench made the point with its abstract: agents "succeed on <50% of the tasks, and are quite inconsistent (pass^8 <25% in retail)". Measure both, report pass^k next to the pass rate, and gate on pass^k for any task class you plan to auto-merge.
+
+Repeats cost money: five runs per task is five times the eval bill. Spend them where the decision is. Run k = 5 on the task classes that are candidates for auto-merge, k = 1 elsewhere, and keep each trial isolated: Anthropic warns that "Unnecessary shared state between runs (leftover files, cached data, resource exhaustion) can cause correlated failures due to infrastructure flakiness rather than agent performance", which would make runs look more consistent, or less, than the agent is.
+
+## Pitfalls seen in the wild
+
+- **Grading the final message.** "All tests pass" is a claim, not an outcome. Grade the repo state or a fresh test run, and add trajectory checks for the properties a final state cannot show.
+- **Scripting the trajectory.** Asserting an exact tool sequence fails good runs that took another route. Check invariants (no test edits, tests after the last edit, no repeated identical call), not order.
+- **Reporting pass@k for an auto-merge decision.** It rewards retries the pipeline will not make. Report pass^k for the task classes you plan to leave unattended.
+- **Treating simulator failures as agent failures.** A confused or inconsistent simulated user makes tasks unsolvable. Read the user turns in failed runs and fix the task.
+- **Trials that share state.** A cache or worktree left by run 1 changes run 2. Start every trial from a clean environment.
+- **Recording only what the runner keeps.** `consume` in harnesskit drops tool results. Tee the message stream into `to_trace_lines` before you need the trajectory.
+
+## What interviewers ask
+
+**What is the difference between pass@k and pass^k?**
+pass@k is the probability that at least one of k independent runs succeeds, pass^k the probability that all k succeed; τ-bench gives unbiased estimators from n runs with c successes. They are equal at k = 1 and diverge as k grows, so pass@k measures capability with retries and pass^k measures reliability.
+
+**When would you evaluate the trajectory and not only the outcome?**
+When the path is part of correctness: the agent must not edit tests, must verify after its last change, must not act on instructions in tool output, must ask before an irreversible action. For everything else grade the outcome, because exact-path assertions reject valid solutions.
+
+**How do you evaluate a conversational agent that needs a user?**
+Simulate the user with a second model constrained to a scripted set of facts and goals, and grade the final environment state, as τ-bench does with database state. Read failed conversations for simulator errors, and use real conversation prefixes (N-1 testing) where you have them.
+
+**Your agent scores 80% on the eval. Is it ready to auto-merge?**
+Not on that number alone: run each task several times and look at pass^k, which can be far below the average, and at which tasks are inconsistent. Gate auto-merge per task class on pass^k and on deterministic outcome checks, and keep a human on the rest.
+
+**How do you check tool-call correctness separately from the answer?**
+Assert on the tool name, the arguments, the result and the resulting state as separate checks in code, plus authorization and preconditions. A correct final answer reached through a wrong or unapproved call is still a failure.
+
+## Sources
+
+- [Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents), Anthropic, published 2026-01-09, checked 2026-10-17
+- [τ-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains](https://arxiv.org/abs/2406.12045), Yao, Shinn, Razavi, Narasimhan, arXiv:2406.12045, published 2024-06-17, checked 2026-10-17
+- [τ²-Bench: Evaluating Conversational Agents in a Dual-Control Environment](https://arxiv.org/abs/2506.07982), Barres, Dong, Ray, Si, Narasimhan, arXiv:2506.07982, published 2025-06-09, checked 2026-10-17
+- [sierra-research/tau2-bench (README)](https://github.com/sierra-research/tau2-bench), checked 2026-10-17
+- [AI Evals: Everything You Need to Know (FAQ)](https://hamel.dev/blog/posts/evals-faq/), Hamel Husain and Shreya Shankar, published 2026-09-18, checked 2026-10-17
+- Course code (repository files, not web sources): `fixtures/harnesskit/src/harnesskit/traces.py` and `runner.py`; `fixtures/evals-traces/README.md`; the lesson helpers in `course/m2-evals-lab/lesson_support/src/evals_lab_lessons/`

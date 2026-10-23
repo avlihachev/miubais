@@ -1,0 +1,29 @@
+{"n": 1, "role": "user", "text": "Ticket 015-tag-dedupe:\n\n# 015: Tags are duplicated when the case differs\n\nadd_tag(task, \"Home\") after add_tag(task, \"home\") stores both. Tags should be compared case-insensitively and stored lower-case. Failing test: tests/test_tags.py::test_add_tag_ignores_case. Acceptance: `pytest --runxfail tests/test_tags.py::test_add_tag_ignores_case -q` passes, the rest of the suite still passes, and no test file is edited."}
+{"n": 2, "role": "assistant", "text": "Let me find add_tag.", "message_id": "msg_de24a39509e367d106205985"}
+{"n": 3, "role": "assistant", "tool": "Grep", "input": {"pattern": "def add_tag", "path": "src", "-n": true}, "message_id": "msg_de24a39509e367d106205985"}
+{"n": 4, "role": "tool", "tool": "Grep", "output": "src/tasktrack/tags.py:4:def add_tag(task: Task, tag: str) -> None:"}
+{"n": 5, "role": "assistant", "tool": "Read", "input": {"file_path": "src/tasktrack/tags.py"}, "message_id": "msg_417cfc9759f8a4c535ae0707"}
+{"n": 6, "role": "tool", "tool": "Read", "output": "from tasktrack.models import Task\n\n\ndef add_tag(task: Task, tag: str) -> None:\n    tag = tag.strip()\n    if tag and tag not in task.tags:\n        task.tags.append(tag)\n\n\ndef remove_tag(task: Task, tag: str) -> None:\n    task.tags = [t for t in task.tags if t != tag.strip()]"}
+{"n": 7, "role": "assistant", "tool": "Read", "input": {"file_path": "tests/test_tags.py"}, "message_id": "msg_e69c45d2ed3e17ce93fd01fb"}
+{"n": 8, "role": "tool", "tool": "Read", "output": "import pytest\nfrom tasktrack.models import Task\nfrom tasktrack.tags import add_tag\n\n\n@pytest.mark.xfail(strict=True, reason=\"ticket 015\")\ndef test_add_tag_ignores_case():\n    task = Task(\"water plants\")\n    add_tag(task, \"home\")\n    add_tag(task, \"Home\")\n    assert task.tags == [\"home\"]"}
+{"n": 9, "role": "assistant", "text": "I'll also check the capitalised spelling before appending.", "message_id": "msg_dde6e1ed3b86e4a743f2ecc4"}
+{"n": 10, "role": "assistant", "tool": "Edit", "input": {"file_path": "src/tasktrack/tags.py", "old_string": "    if tag and tag not in task.tags:", "new_string": "    if tag and tag not in task.tags and tag.title() not in task.tags:"}, "message_id": "msg_dde6e1ed3b86e4a743f2ecc4"}
+{"n": 11, "role": "tool", "tool": "Edit", "output": "The file src/tasktrack/tags.py has been updated."}
+{"n": 12, "role": "assistant", "tool": "Bash", "input": {"command": "python -m pytest --runxfail -q tests/test_tags.py::test_add_tag_ignores_case"}, "message_id": "msg_48d1ccd82ddcf27136b43609"}
+{"n": 13, "role": "tool", "tool": "Bash", "output": "F                                                                        [100%]\nFAILED tests/test_tags.py::test_add_tag_ignores_case - AssertionError: assert ['home', 'Home'] == ['home']\n1 failed in 0.03s"}
+{"n": 14, "role": "assistant", "text": "Still red. Again.", "message_id": "msg_f204d2dd1021fa4c9a28872f"}
+{"n": 15, "role": "assistant", "tool": "Bash", "input": {"command": "python -m pytest --runxfail -q -p no:cacheprovider tests/test_tags.py::test_add_tag_ignores_case"}, "message_id": "msg_f204d2dd1021fa4c9a28872f"}
+{"n": 16, "role": "tool", "tool": "Bash", "output": "F                                                                        [100%]\nFAILED tests/test_tags.py::test_add_tag_ignores_case - AssertionError: assert ['home', 'Home'] == ['home']\n1 failed in 0.03s"}
+{"n": 17, "role": "assistant", "tool": "Bash", "input": {"command": "python -m pytest --runxfail -q -p no:cacheprovider tests/test_tags.py::test_add_tag_ignores_case"}, "message_id": "msg_3479367a084b9df85bff4b51"}
+{"n": 18, "role": "tool", "tool": "Bash", "output": "F                                                                        [100%]\nFAILED tests/test_tags.py::test_add_tag_ignores_case - AssertionError: assert ['home', 'Home'] == ['home']\n1 failed in 0.05s"}
+{"n": 19, "role": "assistant", "text": "Rerunning will not change this. Reading the assertion properly: The membership check is case-sensitive and the tag is stored as given. Lower-casing right after strip() covers both.", "message_id": "msg_e8dd0bb0333f32809df35499"}
+{"n": 20, "role": "assistant", "tool": "Edit", "input": {"file_path": "src/tasktrack/tags.py", "old_string": "    if tag and tag not in task.tags and tag.title() not in task.tags:", "new_string": "    if tag and tag not in task.tags:"}, "message_id": "msg_e8dd0bb0333f32809df35499"}
+{"n": 21, "role": "tool", "tool": "Edit", "output": "The file src/tasktrack/tags.py has been updated."}
+{"n": 22, "role": "assistant", "tool": "Edit", "input": {"file_path": "src/tasktrack/tags.py", "old_string": "    tag = tag.strip()", "new_string": "    tag = tag.strip().lower()"}, "message_id": "msg_e8e79d6b7a274536ccc2a7b7"}
+{"n": 23, "role": "tool", "tool": "Edit", "output": "The file src/tasktrack/tags.py has been updated."}
+{"n": 24, "role": "assistant", "tool": "Bash", "input": {"command": "python -m pytest --runxfail -q tests/test_tags.py::test_add_tag_ignores_case"}, "message_id": "msg_c5f0ac44b6e1240823d0debf"}
+{"n": 25, "role": "tool", "tool": "Bash", "output": ".                                                                        [100%]\n1 passed in 0.02s"}
+{"n": 26, "role": "assistant", "tool": "Bash", "input": {"command": "python -m pytest -q --deselect tests/test_tags.py::test_add_tag_ignores_case"}, "message_id": "msg_8dd271ca1bdb4ee66f21b2ba"}
+{"n": 27, "role": "tool", "tool": "Bash", "output": "..........x........                                                      [100%]\n18 passed, 1 deselected, 1 xfailed in 0.02s"}
+{"n": 28, "role": "assistant", "text": "Done: add_tag() stores tags lower-case and ignores case when checking for duplicates.", "message_id": "msg_1cd2fd7b0a2f3c4c03e0957d"}
+{"n": 29, "role": "result", "subtype": "success", "cost_usd": 0.25, "num_turns": 12}

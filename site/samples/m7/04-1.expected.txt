@@ -1,0 +1,9 @@
+weights: conflict 100, verify-failed 90, stale-migration 80, missing-second-approval 60, unreviewed-age 30
+pr               score  verdict blockers
+f-rebase           160  block   conflict, missing-second-approval
+d-red-tests         90  block   verify-failed
+c-dup-migration     80  block   stale-migration
+b-schema            60  hold    missing-second-approval
+e-stale             30  hold    unreviewed-age
+a-docs               0  merge   none
+g-ui-major           0  hold    none

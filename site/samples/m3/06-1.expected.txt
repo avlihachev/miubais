@@ -1,0 +1,9 @@
+tool span durations, ms, over 40 recorded runs
+tool      n    p50    p90    p99    max
+Bash    117    490    864    894    899
+Edit     61    488    845    891    891
+Grep     46    495    835    894    894
+Read     79    519    825    870    870
+unfinished (no_result, left out): 2
+turns with parallel tool calls: 9 of 287
+share of wall time in chat spans: 91.4%

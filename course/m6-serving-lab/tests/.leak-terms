@@ -1,0 +1,80 @@
+ (waiting 
+ is missing and the input has no setup.
+ is shorter than the load's wall time 
+ needed for 
+ outside min/max
+, want '/health'
+, want 'nvidia'
+--max-model-len not set
+/registry.json
+/repositories.yaml
+/repository
+: explain 
+CHARS_PER_TOKEN
+HELM_CACHE_HOME
+HELM_CONFIG_HOME
+HELM_DATA_HOME
+HELM_REGISTRY_CONFIG
+HF token written into Secret 
+HF_ENV
+HF_TOKEN not from a secretKeyRef
+HF_TOKEN set inline
+RouteError
+SECONDS_PER_HOUR
+STREAM_CLOSED
+TOKENS_PER_MILLION
+_Tally
+_api
+_api_cost
+_argv
+_call
+_candidates
+_gpu_request
+_healthy
+_hf_token
+_is_vllm
+_local
+_max_model_len
+_model_pvc
+_number
+_one
+_pdb
+_quantity
+_readiness_probe
+_record
+_resource_limits
+_route
+_runtime_class
+_unavailable
+_vllm_pods
+_window
+candidates
+default_prompts
+down: at most 
+estimate_tokens
+helm template failed: 
+kubeconform gave no report
+last_change
+latencies_ms
+miubais-helm-
+model cache is not on a PersistentVolumeClaim
+no HF_TOKEN env
+no Kubernetes resources found
+no PodDisruptionBudget selects its pods
+no memory limit
+no route can serve require=
+no vLLM Deployment found
+prompt and max_tokens exceed the route's 
+readinessProbe httpGet path is 
+route names must be unique
+run_usd
+statusError
+statusInvalid
+the GPU price and the run seconds must be positive
+the run produced no output tokens
+token_times
+tokens_in
+ttfts
+unreachable: 
+up: at least 
+validationErrors

@@ -1,0 +1,19 @@
+servingEngineSpec:
+  runtimeClassName: ""
+  modelSpec:
+    - name: qwen35-08b
+      repository: vllm/vllm-openai
+      tag: latest
+      modelURL: Qwen/Qwen3.5-0.8B
+      replicaCount: 1
+      requestCPU: 4
+      requestMemory: 8Gi
+      requestGPU: 1
+      hf_token: hf_REPLACE_ME
+
+kube-prometheus-stack:
+  enabled: false
+prometheus-adapter:
+  enabled: false
+k8s-aibom:
+  enabled: false

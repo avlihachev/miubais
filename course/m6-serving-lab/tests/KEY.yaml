@@ -1,0 +1,8 @@
+# Serving-plan key for stage 07. placements lists, per workload, the placements that count as an
+# answer for the README scenario (EU customer data, a budget of 10,000 USD a month).
+# On the honour system: read it only to check your own SERVING_PLAN.md.
+placements:
+  agent coding tickets: [api]
+  support chat: [self-hosted vllm]
+  embeddings and retrieval: [self-hosted vllm, local]
+  judge and evals: [api]
