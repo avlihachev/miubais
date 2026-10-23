@@ -6,7 +6,8 @@ freshness: skip
 
 ## What you need
 
-- Python 3.12 and [uv](https://docs.astral.sh/uv/).
+- [uv](https://docs.astral.sh/uv/). It downloads Python 3.12 when the machine has none.
+- git. On macOS the first `git` command opens the Command Line Tools installer; run it again once the install finishes.
 - A Claude Code login, for hints.
 - Node, Go, Docker and Ollama only in the modules that say so.
 

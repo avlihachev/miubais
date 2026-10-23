@@ -19,8 +19,8 @@ The last command fails at stage 01: the starter raises on purpose, and the lesso
 
 Required:
 
-- Python 3.12
-- uv
+- uv (it downloads Python 3.12 when the machine has none)
+- git (on macOS the first `git` command opens the Command Line Tools installer; run it again once the install finishes)
 - a Claude Code login (tutor)
 
 Optional, per module: Node 22+ and pnpm (the local site), Node 26+ (M7), Go 1.27 (M7), Docker (M4 stages 02-09 run Postgres with pgvector), Helm, kubeconform, Ollama, an Anthropic API key (M0 live stages), the embedding models `BAAI/bge-small-en-v1.5` and `Xenova/ms-marco-MiniLM-L-6-v2` (M4 stage 08, 66.5 MB and 91 MB, about 160 MB; the live stage downloads them on first run into `~/.cache/fastembed` (or `$FASTEMBED_CACHE_PATH`); `uv run miubais doctor` shows `embed-model`). `miubais doctor` lists each prerequisite and whether this machine has it.
