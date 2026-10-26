@@ -163,3 +163,11 @@
 html:not([data-has-sidebar]):has(miubais-factory-map) {
   --sl-content-width: 76rem;
 }
+
+@media (max-width: 50rem) {
+  .site-title {
+    font-size: var(--sl-text-lg);
+    line-height: 1.15;
+    white-space: normal;
+  }
+}

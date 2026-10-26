@@ -26,6 +26,12 @@ const moduleIds = new Set(modules.map(([dir]) => dir));
 const unassigned = exercises.filter((e) => !moduleIds.has(e.module));
 
 const head = [
+  { tag: "link", attrs: { rel: "icon", href: "/favicon.ico", sizes: "32x32" } },
+  { tag: "link", attrs: { rel: "apple-touch-icon", href: "/apple-touch-icon.png" } },
+  { tag: "meta", attrs: { property: "og:image", content: "https://factory.lihachev.pro/og.png" } },
+  { tag: "meta", attrs: { property: "og:image:width", content: "1200" } },
+  { tag: "meta", attrs: { property: "og:image:height", content: "630" } },
+  { tag: "meta", attrs: { name: "twitter:image", content: "https://factory.lihachev.pro/og.png" } },
   { tag: "link", attrs: { rel: "preconnect", href: "https://fonts.googleapis.com" } },
   { tag: "link", attrs: { rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: true } },
   {
@@ -54,6 +60,7 @@ export default defineConfig({
     starlight({
       title: "Mum, I wanna be an AI Engineer",
       description: "A test-graded, version-pinned course for engineers who already build agents.",
+      social: [{ icon: "github", label: "GitHub", href: "https://github.com/avlihachev/miubais" }],
       customCss: ["./src/styles/custom.css"],
       head,
       components: { PageTitle: "./src/components/PageTitleWithBadge.astro" },
